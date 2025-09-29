@@ -35,9 +35,10 @@ class OrderService
 
         // ADD: qty? + (number|no.|#)? + id + optional with/without
         // Examples: "add number 3", "add #3 with ketchup", "add two number 5 without onions"
+        // Name-based add (qty? size? name (with ...)? (without ...)?)
         if (preg_match(
             '/^(?:add|and|also|plus|i\s+want|give\s+me|include)\s+' .
-            '(?:at\s+)?' . // <-- allow "add at ..."
+            '(?:(?:at|in|on|to|for|please|me|us|the)\s+)*' .        // <-- tolerate fillers after verb
             '(?:(?<qty>\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\s+)?' .
             '(?:a|an)?\s*(?:number|no\.|#)?\s*(?<id>\d+)\b' .
             '(?:.*?\bwith\b\s+(?<with>.*?))?' .
@@ -46,7 +47,7 @@ class OrderService
             $norm,
             $m
         )) {
-            $qty     = $this->toQty($m['qty'] ?? null) ?: 1;
+            $qty     = $this->toQty($m['qty'] ?? '') ?: 1;
             $id      = (int)($m['id'] ?? 0);
             $adds    = $this->splitList($m['with'] ?? '');
             $removes = $this->splitList($m['without'] ?? '');
@@ -93,26 +94,64 @@ class OrderService
     }
 
     /** ---------- Internals ---------- */
+    private function normalizeSize(?string $size): ?string
+    {
+        if (!$size) return null;
+        $s = mb_strtolower(trim($size));
+        return match ($s) {
+            'small'   => 'Small',   // in case you add it later
+            'regular' => 'Regular',
+            'large'   => 'Large',
+            default   => null,
+        };
+    }
 
+    private function stripDiacritics(string $s): string
+    {
+        // enough for our menu (jalapeño -> jalapeno, etc.)
+        $from = ['á','é','í','ó','ú','ñ','Á','É','Í','Ó','Ú','Ñ','’','ʼ','ʻ','ˈ'];
+        $to   = ['a','e','i','o','u','n','a','e','i','o','u','n',"'", "'", "'", "'"];
+        return str_replace($from, $to, $s);
+    }
+
+    /** Map common spoken variants to menu spellings */
+    private function lexify(string $s): string
+    {
+        // BBQ variants
+        $s = preg_replace('/\bbarbe?cue\b/iu', 'bbq', $s) ?? $s;           // “barbecue/barbeque”
+        $s = preg_replace('/\bbar[-\s]*b[-\s]*q\b/iu', 'bbq', $s) ?? $s;   // “bar-b-q”, “bar b q”
+        $s = preg_replace('/\bb\.?\s*b\.?\s*q\.?\b/iu', 'bbq', $s) ?? $s;  // “b.b.q”, “b b q”
+
+        // Milkshake
+        $s = preg_replace('/\bmilk[-\s]*shake\b/iu', 'milkshake', $s) ?? $s;
+
+        // Mac & Cheese
+        $s = preg_replace('/\bmac\s*(?:and|&|n[\'’]?)\s*cheese\b/iu', 'mac & cheese', $s) ?? $s;
+
+        // Jalapeño normalize (spoken often as 'jalapeno')
+        $s = preg_replace('/\bjalapen(?:o|os)\b/iu', 'jalapeno', $s) ?? $s;
+
+        // Coke → Coca-Cola (optional)
+        $s = preg_replace('/\bcoke\b/iu', 'coca cola', $s) ?? $s;
+
+        return $s;
+    }
     private function normalize(string $s): string
     {
         $s = trim($s ?? '');
-
-        // collapse spaces
         $s = preg_replace('/\s+/u', ' ', $s) ?? $s;
 
-        // strip trailing punctuation like ".", "!", "?"
+        // strip trailing punctuation
         $s = preg_replace('/[.!?]+$/u', '', $s) ?? $s;
 
-        // SPECIAL: "and at ..." → "add ..."
+        // "and at ..." -> "add ..."
         $s = preg_replace('/^\s*(?:and\s+at)\b[,:-]?\s*/iu', 'add ', $s) ?? $s;
 
-        // If it *starts* with 'and/also/plus/...' treat as "add ..."
-        $s = preg_replace('/^\s*(?:and|also|plus|yeah|yep|ok|okay|uh|um|please|then)\b[,:-]?\s*/iu', 'add ', $s) ?? $s;
+        // start-of-line fillers -> "add ..."
+        $s = preg_replace('/^\s*(?:and|also|plus|yeah|yep|ok|okay|uh|um|please|then|at)\b[,:-]?\s*/iu', 'add ', $s) ?? $s;
 
-        // "at" at start, but only if followed by number marker or digits → treat as add
-        // e.g. "at number 27" or "at #5" or "at 12"
-        $s = preg_replace('/^\s*at\b(?=\s+(?:a|an)?\s*(?:number|no\.|#|\d+))/iu', 'add ', $s) ?? $s;
+        // NEW: fillers immediately after "add" → remove (e.g. "add in number 37" -> "add number 37")
+        $s = preg_replace('/^\s*add\s+(?:(?:in|on|to|for|please|me|us|the)\s+)+/iu', 'add ', $s) ?? $s;
 
         // Convert "number two"/"no. two"/"#two" -> "number 2"
         $s = preg_replace_callback(
@@ -124,6 +163,7 @@ class OrderService
 
         return $s;
     }
+
 
 
 
@@ -180,19 +220,94 @@ class OrderService
         return true;
     }
 
-    private function addByName(string $name, int $qty, array $add, array $remove): bool
+    /** Case/space tolerant, size-aware lookup by name with simple fuzzy fallback */
+    private function addByName(string $spokenName, int $qty, array $add, array $remove, ?string $size = null): bool
     {
-        if ($name === '') return false;
+        $spoken = $this->normName($spokenName);
+        if ($spoken === '') return false;
+
         $menu = $this->menu();
-        // simple case-insensitive name match (first match)
+
+        // 1) Exact name (ci) + size match
         foreach ($menu as $id => $m) {
-            if (mb_strtolower($m['name']) === mb_strtolower($name)) {
+            if ($this->normName($m['name']) === $spoken && $this->sizeMatches($m['size'] ?? null, $size)) {
                 return $this->addByMenuId((int)$id, $qty, $add, $remove);
             }
         }
+
+        // 2) Exact name (ci) ignoring size (pick best size if multiple)
+        $candidates = [];
+        foreach ($menu as $id => $m) {
+            if ($this->normName($m['name']) === $spoken) {
+                $candidates[] = $m + ['id' => (int)$id];
+            }
+        }
+        if ($candidates) {
+            $picked = $this->pickBySize($candidates, $size);
+            return $this->addByMenuId((int)$picked['id'], $qty, $add, $remove);
+        }
+
+        // 3) Contains match (spoken substring of menu name), prefer startsWith
+        $contains = [];
+        foreach ($menu as $id => $m) {
+            $nm = $this->normName($m['name']);
+            if (str_contains($nm, $spoken)) {
+                $score = (int)str_starts_with($nm, $spoken) * 2 + 1; // 3 for startsWith, 1 for contains
+                $contains[] = ['id' => (int)$id, 'score' => $score] + $m;
+            }
+        }
+        if ($contains) {
+            usort($contains, function($a, $b) use ($size) {
+                // higher score first; then prefer size match; then cheaper
+                $sc = $b['score'] <=> $a['score'];
+                if ($sc !== 0) return $sc;
+                $sm = ($this->sizeMatches($b['size'] ?? null, $size) ? 1 : 0) <=> ($this->sizeMatches($a['size'] ?? null, $size) ? 1 : 0);
+                if ($sm !== 0) return $sm;
+                return ($a['price'] ?? 0) <=> ($b['price'] ?? 0);
+            });
+            return $this->addByMenuId((int)$contains[0]['id'], $qty, $add, $remove);
+        }
+
+        // 4) Last resort: Levenshtein on names
+        $bestId = null; $bestDist = PHP_INT_MAX;
+        foreach ($menu as $id => $m) {
+            $d = levenshtein($spoken, $this->normName($m['name']));
+            if ($d < $bestDist) { $bestDist = $d; $bestId = (int)$id; }
+        }
+        if ($bestId !== null && $bestDist <= 3) { // small typo tolerance
+            return $this->addByMenuId($bestId, $qty, $add, $remove);
+        }
+
         return false;
     }
 
+    private function pickBySize(array $candidates, ?string $want): array
+    {
+        // If user specified, pick that; else prefer Regular, then Large, else the first.
+        if ($want) {
+            foreach ($candidates as $c) if ($this->sizeMatches($c['size'] ?? null, $want)) return $c;
+        }
+        foreach ($candidates as $c) if ($this->normalizeSize($c['size'] ?? null) === 'Regular') return $c;
+        foreach ($candidates as $c) if ($this->normalizeSize($c['size'] ?? null) === 'Large')   return $c;
+        return $candidates[0];
+    }
+    private function sizeMatches(?string $menuSize, ?string $want): bool
+    {
+        if ($want === null) return true;          // if user didn’t specify, any size is acceptable
+        return $this->normalizeSize($menuSize) === $want;
+    }
+
+    /** Use this for BOTH spoken and menu names before comparing */
+    private function normName(string $s): string
+    {
+        $s = mb_strtolower(trim($s));
+        $s = $this->stripDiacritics($s);
+        $s = $this->lexify($s);
+        $s = str_replace('-', ' ', $s);                              // unify hyphens
+        $s = preg_replace('/[^\p{L}\p{N}& ]+/u', ' ', $s) ?? $s;     // drop punctuation except &
+        $s = preg_replace('/\s+/u', ' ', $s) ?? $s;                  // collapse spaces
+        return $s;
+    }
     private function decrementById(int $id, int $qty): bool
     {
         $items = $this->all();
