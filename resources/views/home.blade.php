@@ -9,14 +9,14 @@
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <style>
         [v-cloak]{display:none}
-        body { font-family: system-ui, sans-serif; margin: 2rem; }
+        body { font-family: system-ui, sans-serif; }
         button { padding: .6rem 1rem; margin-right: .5rem; }
         .log { white-space: pre-wrap; background: #111; color: #0f0; padding: 1rem; border-radius: .5rem; height: 14rem; overflow:auto; }
         .chip { display:inline-block; background:#eef; color:#224; padding:.25rem .5rem; border-radius:999px; margin:.25rem .25rem 0 0; }
     </style>
 </head>
 <body>
-<div id="app" v-cloak>
+<div id="app" class="p-0 m-0 w-screen h-screen">
     <h1>WebRTC end-of-speech + Reverb + Faster-Whisper</h1>
 
     <div style="margin-bottom: 12px">

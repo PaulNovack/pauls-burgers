@@ -1,6 +1,6 @@
 <template>
     <header class="sticky top-0 z-50 border-b border-gray-200 bg-white/90 backdrop-blur shadow-sm dark:border-gray-800 dark:bg-gray-900/90">
-        <div class="mx-auto max-w-screen-xl px-4">
+        <div class="mx-auto max-w-screen-xl">
             <!-- Taller header on mobile for bigger touch area -->
             <nav class="flex h-16 items-center justify-between sm:h-16 md:h-16" aria-label="Main">
                 <!-- Brand -->
@@ -92,6 +92,7 @@ const openMore = ref(false)
 const primaryLinks = [
     { to: '/', label: 'Home' },
     { to: '/list', label: 'List' },
+    { to: '/order', label: 'Burger Order' },
 ]
 
 

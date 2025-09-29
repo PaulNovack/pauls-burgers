@@ -1,0 +1,26 @@
+FROM python:3.12-slim
+
+# System deps for onnxruntime and optional ffmpeg/pydub
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libgomp1 ffmpeg ca-certificates curl \
+ && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy app code
+COPY server.py ./server.py
+# Copy models into the image (or mount them)
+COPY models ./models
+
+ENV PORT=8001
+ENV PIPER_MODEL=/app/models/en_US-amy-low.onnx
+# Optional tuning
+ENV PIPER_LENGTH_SCALE=1.0
+ENV PIPER_NOISE_SCALE=0.667
+ENV PIPER_NOISE_W=0.8
+
+EXPOSE 8001
+CMD ["uvicorn", "server:app", "--host", "0.0.0.0", "--port", "8001", "--timeout-keep-alive", "20"]

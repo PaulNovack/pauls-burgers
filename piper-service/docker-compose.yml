@@ -1,0 +1,12 @@
+services:
+    piper:
+        build: .
+        image: piper-tts:local
+        ports:
+            - "8001:8001"
+        restart: unless-stopped
+        # If you prefer to mount models instead of baking them:
+        # volumes:
+        #   - ./models:/app/models:ro
+        environment:
+            PIPER_MODEL: /app/models/en_US-amy-low.onnx

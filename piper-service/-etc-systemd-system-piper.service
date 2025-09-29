@@ -1,0 +1,15 @@
+[Unit]
+Description=Piper TTS HTTP Server
+After=network.target
+
+[Service]
+User=www-data
+Group=www-data
+WorkingDirectory=/opt/piper-server
+Environment="PIPER_MODEL=/opt/piper-server/models/en_US-amy-low.onnx"
+ExecStart=/opt/piper-server/.venv/bin/uvicorn server:app --host 0.0.0.0 --port 8001 --timeout-keep-alive 20
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target
