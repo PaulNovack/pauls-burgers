@@ -33,6 +33,28 @@ class OrderService
             return ['action' => 'clear', 'items' => $this->clear()];
         }
 
+        // ADD by <size> + <name>
+        if (preg_match(
+            '/^(?:add|and|also|plus|i\s+want|give\s+me|include)\s+' .
+            '(?:(?:a|an)\s+)?' .
+            '(?<size>small|regular|large)\s+' .          // ← REQUIRED size here
+            '(?<name>.+?)(?=\s+(?:with|without)\b|$)' .  // name until with/without or end
+            '(?:\s+\bwith\b\s+(?<with>.*?))?' .
+            '(?:\s+\bwithout\b\s+(?<without>.*))?' .
+            '$/siu',
+            $norm,
+            $m
+        )) {
+            $qty     = 1;
+            $size    = $this->normalizeSize($m['size'] ?? null);
+            $name    = trim($m['name'] ?? '');
+            $adds    = $this->splitList($m['with'] ?? '');
+            $removes = $this->splitList($m['without'] ?? '');
+
+            $ok = $this->addByName($name, $qty, $adds, $removes, $size);
+            return ['action' => $ok ? 'add' : 'noop', 'items' => $this->all()];
+        }
+
         // ADD: qty? + (number|no.|#)? + id + optional with/without
         // Examples: "add number 3", "add #3 with ketchup", "add two number 5 without onions"
         // Name-based add (qty? size? name (with ...)? (without ...)?)
@@ -56,20 +78,27 @@ class OrderService
             return ['action' => $ok ? 'add' : 'noop', 'items' => $this->all()];
         }
 
-        // Fallback: “add a cheeseburger with …” (name lookup)
+// Fallback: name add with optional qty and optional size
         if (preg_match(
             '/^(?:add|and|also|plus|i\s+want|give\s+me|include)\s+' .
-            '(?<name>.+?)' .
+            '(?:(?<qty>\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\s+)?' . // qty?  <- NEW
+            '(?:of\s+)?' .                                                   // "add six of onion rings" support
+            '(?:(?:a|an)\s+)?' .
+            '(?:(?<size>small|regular|large)\s+)?' .                         // size? <- NEW
+            '(?<name>.+?)(?=\s+(?:with|without)\b|$)' .                      // name until with/without or end
             '(?:\s+\bwith\b\s+(?<with>.*?))?' .
             '(?:\s+\bwithout\b\s+(?<without>.*))?' .
             '$/siu',
             $norm,
             $m
         )) {
+            $qty     = $this->toQty($m['qty'] ?? '') ?: 1;
+            $size    = $this->normalizeSize($m['size'] ?? null);
             $name    = trim($m['name'] ?? '');
             $adds    = $this->splitList($m['with'] ?? '');
             $removes = $this->splitList($m['without'] ?? '');
-            $ok = $this->addByName($name, 1, $adds, $removes);
+
+            $ok = $this->addByName($name, $qty, $adds, $removes, $size);
             return ['action' => $ok ? 'add' : 'noop', 'items' => $this->all()];
         }
 
@@ -140,29 +169,36 @@ class OrderService
     {
         $s = trim($s ?? '');
         $s = preg_replace('/\s+/u', ' ', $s) ?? $s;
-
-        // strip trailing punctuation
-        $s = preg_replace('/[.!?]+$/u', '', $s) ?? $s;
+        $s = preg_replace('/[.!?]+$/u', '', $s) ?? $s; // strip trailing punc
 
         // "and at ..." -> "add ..."
         $s = preg_replace('/^\s*(?:and\s+at)\b[,:-]?\s*/iu', 'add ', $s) ?? $s;
 
-        // start-of-line fillers -> "add ..."
+        // starters -> "add ..."
         $s = preg_replace('/^\s*(?:and|also|plus|yeah|yep|ok|okay|uh|um|please|then|at)\b[,:-]?\s*/iu', 'add ', $s) ?? $s;
 
-        // NEW: fillers immediately after "add" → remove (e.g. "add in number 37" -> "add number 37")
+        // NEW: "i had ..." / "i have ..." misheard for "add ..."
+        $s = preg_replace('/^\s*(?:i\s+had|i\s+have|i\'d|i\s+add)\b[,:-]?\s*/iu', 'add ', $s) ?? $s;
+
+        // NEW: "i had to ..." -> "add two ..."
+        $s = preg_replace('/^\s*i\s*had\s+to\b/iu', 'add two', $s) ?? $s;
+
+        // Existing: remove fillers right after add (add in/to/for …)
         $s = preg_replace('/^\s*add\s+(?:(?:in|on|to|for|please|me|us|the)\s+)+/iu', 'add ', $s) ?? $s;
 
-        // Convert "number two"/"no. two"/"#two" -> "number 2"
+        // NEW: "add to ..." / "add too ..." -> "add two ..."
+        $s = preg_replace('/^add\s+(?:to|too)\b/iu', 'add two', $s) ?? $s;
+
+        // Convert "number two"/"no. two"/"#two" -> "number 2" (and allow homophones)
         $s = preg_replace_callback(
-            '/\b(?:number|no\.|#)\s*' .
-            '(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\b/iu',
+            '/\b(?:number|no\.|#)\s*(one|two|to|too|three|four|for|five|six|seven|eight|nine|ten|eleven|twelve)\b/iu',
             fn($m) => 'number ' . ($this->toQty($m[1]) ?: 0),
             $s
         ) ?? $s;
 
         return $s;
     }
+
 
 
 
@@ -182,11 +218,22 @@ class OrderService
         $s = mb_strtolower(trim($s));
         if (ctype_digit($s)) return max(1, (int)$s);
         $map = [
-            'one'=>1,'two'=>2,'three'=>3,'four'=>4,'five'=>5,'six'=>6,
-            'seven'=>7,'eight'=>8,'nine'=>9,'ten'=>10,'eleven'=>11,'twelve'=>12
+            'one'=>1,
+            'two'=>2, 'to'=>2, 'too'=>2,              // ← NEW
+            'three'=>3,
+            'four'=>4, 'for'=>4,                      // ← NEW (ASR “for” → 4)
+            'five'=>5,
+            'six'=>6,
+            'seven'=>7,
+            'eight'=>8,
+            'nine'=>9,
+            'ten'=>10,
+            'eleven'=>11,
+            'twelve'=>12,
         ];
         return $map[$s] ?? 0;
     }
+
 
     private function splitList(string $s): array
     {
@@ -228,58 +275,66 @@ class OrderService
 
         $menu = $this->menu();
 
-        // 1) Exact name (ci) + size match
-        foreach ($menu as $id => $m) {
-            if ($this->normName($m['name']) === $spoken && $this->sizeMatches($m['size'] ?? null, $size)) {
-                return $this->addByMenuId((int)$id, $qty, $add, $remove);
+        // 1) Exact normalized name + size (ONLY if size was specified)
+        if ($size !== null) {
+            foreach ($menu as $idx => $m) {
+                $itemId = (int)($m['id'] ?? $idx);
+                if ($this->normName($m['name'] ?? '') === $spoken && $this->sizeMatches($m['size'] ?? null, $size)) {
+                    return $this->addByMenuId($itemId, $qty, $add, $remove);
+                }
             }
         }
 
-        // 2) Exact name (ci) ignoring size (pick best size if multiple)
-        $candidates = [];
-        foreach ($menu as $id => $m) {
-            if ($this->normName($m['name']) === $spoken) {
-                $candidates[] = $m + ['id' => (int)$id];
+        // 2) Exact name ignoring size -> pick best size (Regular > Large)
+        $cands = [];
+        foreach ($menu as $idx => $m) {
+            if ($this->normName($m['name'] ?? '') === $spoken) {
+                $cands[] = $m + ['id' => (int)($m['id'] ?? $idx)];
             }
         }
-        if ($candidates) {
-            $picked = $this->pickBySize($candidates, $size);
+        if ($cands) {
+            $picked = $this->pickBySize($cands, $size); // null -> prefers Regular
             return $this->addByMenuId((int)$picked['id'], $qty, $add, $remove);
         }
 
-        // 3) Contains match (spoken substring of menu name), prefer startsWith
-        $contains = [];
-        foreach ($menu as $id => $m) {
-            $nm = $this->normName($m['name']);
-            if (str_contains($nm, $spoken)) {
-                $score = (int)str_starts_with($nm, $spoken) * 2 + 1; // 3 for startsWith, 1 for contains
-                $contains[] = ['id' => (int)$id, 'score' => $score] + $m;
+        // 3) Token-subset fallback (e.g., "curly fries" matches "Curly Fries")
+        $spokenTokens = array_filter(explode(' ', $spoken));
+        $best = null;
+        $bestScore = -1;
+        foreach ($menu as $idx => $m) {
+            $nm = $this->normName($m['name'] ?? '');
+            $menuTokens = array_filter(explode(' ', $nm));
+
+            // score = # of spoken tokens present in menu name
+            $hit = 0;
+            foreach ($spokenTokens as $t) {
+                if (in_array($t, $menuTokens, true)) $hit++;
+            }
+            if ($hit > 0 && $this->sizeMatches($m['size'] ?? null, $size)) {
+                $score = $hit * 10 + (int)str_starts_with($nm, $spoken); // prefer starts-with ties
+                if ($score > $bestScore) {
+                    $bestScore = $score;
+                    $best = $m + ['id' => (int)($m['id'] ?? $idx)];
+                }
             }
         }
-        if ($contains) {
-            usort($contains, function($a, $b) use ($size) {
-                // higher score first; then prefer size match; then cheaper
-                $sc = $b['score'] <=> $a['score'];
-                if ($sc !== 0) return $sc;
-                $sm = ($this->sizeMatches($b['size'] ?? null, $size) ? 1 : 0) <=> ($this->sizeMatches($a['size'] ?? null, $size) ? 1 : 0);
-                if ($sm !== 0) return $sm;
-                return ($a['price'] ?? 0) <=> ($b['price'] ?? 0);
-            });
-            return $this->addByMenuId((int)$contains[0]['id'], $qty, $add, $remove);
+        if ($best) {
+            return $this->addByMenuId((int)$best['id'], $qty, $add, $remove);
         }
 
-        // 4) Last resort: Levenshtein on names
+        // 4) Small-typo Levenshtein fallback (name-only)
         $bestId = null; $bestDist = PHP_INT_MAX;
-        foreach ($menu as $id => $m) {
-            $d = levenshtein($spoken, $this->normName($m['name']));
-            if ($d < $bestDist) { $bestDist = $d; $bestId = (int)$id; }
+        foreach ($menu as $idx => $m) {
+            $d = levenshtein($spoken, $this->normName($m['name'] ?? ''));
+            if ($d < $bestDist) { $bestDist = $d; $bestId = (int)($m['id'] ?? $idx); }
         }
-        if ($bestId !== null && $bestDist <= 3) { // small typo tolerance
+        if ($bestId !== null && $bestDist <= 3) {
             return $this->addByMenuId($bestId, $qty, $add, $remove);
         }
 
         return false;
     }
+
 
     private function pickBySize(array $candidates, ?string $want): array
     {
