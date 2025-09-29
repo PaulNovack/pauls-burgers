@@ -92,7 +92,7 @@ const openMore = ref(false)
 const primaryLinks = [
     { to: '/', label: 'Home' },
     { to: '/list', label: 'List' },
-    { to: '/order', label: 'Burger Order' },
+    { to: '/burgerorder', label: 'Burger Order' },
 ]
 
 

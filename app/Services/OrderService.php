@@ -8,270 +8,273 @@ class OrderService
 {
     public function __construct(
         private readonly Session $session,
-        private readonly string $key = 'user.order.lines'
+        private readonly string $key = 'user.order.items'
     ) {}
 
-    /** Replace with your full catalog source if you wish (DB/config/file). */
-    private function catalog(): array
-    {
-        // Minimal demo catalog; add all your items here or load from config/menu.php, etc.
-        $items = config('menu.items');
-        return collect($items)->keyBy('id')->all();
-    }
-
-    private array $KNOWN_TOPPINGS = [
-        '2 beef patties','american cheese','avocado','bacon','bbq sauce','beef patty',
-        'blue cheese crumbles','caramelized onions','cheddar cheese','chipotle mayo',
-        'grilled mushrooms','jalapeños','ketchup','lettuce','mustard','onion','onion rings',
-        'pepper jack cheese','pickles','quarter pound beef patty','swiss cheese','tomato','veggie patty',
-    ];
-
-    // ---------------- Session helpers ----------------
+    /** Public API: return all lines from session */
     public function all(): array
     {
         return $this->session->get($this->key, []);
     }
 
-    private function save(array $lines): void
-    {
-        $this->session->put($this->key, array_values($lines));
-    }
-
     public function clear(): array
     {
-        $this->save([]);
+        $this->session->put($this->key, []);
         return [];
     }
 
-    // --------------- Public command entry ---------------
-    /**
-     * Supports:
-     *  - "add 2 #20 large"
-     *  - "add #3 with ketchup and mustard"
-     *  - "add a number 3 without onions" / "no onions"
-     *  - "remove one #20" (basic)
-     *  - "clear order" / "reset order"
-     */
+    /** Main entry: parse a natural command and mutate order in session */
     public function processCommand(string $text): array
     {
-        $raw = trim((string) $text);
-        if ($raw === '') return ['action' => 'noop', 'items' => $this->all()];
+        $norm = $this->normalize($text);
 
-        $t = mb_strtolower($raw);
-
-        if ($this->isClearCommand($t)) {
+        // Clear order
+        if ($this->isClear($norm)) {
             return ['action' => 'clear', 'items' => $this->clear()];
         }
 
-        // REMOVE (simple form)
-        if (preg_match('/^\s*(remove|delete|minus|drop)\b/u', $t)) {
-            [$qty, $id] = $this->extractQtyAndId($t);
-            $size   = $this->extractSize($t);
-            $add    = []; // removing ignores add/remove variants for simplicity
-            $remove = [];
+        // ADD: qty? + (number|no.|#)? + id + optional with/without
+        // Examples: "add number 3", "add #3 with ketchup", "add two number 5 without onions"
+        if (preg_match(
+            '/^(?:add|and|also|plus|i\s+want|give\s+me|include)\s+' .
+            '(?:at\s+)?' . // <-- allow "add at ..."
+            '(?:(?<qty>\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\s+)?' .
+            '(?:a|an)?\s*(?:number|no\.|#)?\s*(?<id>\d+)\b' .
+            '(?:.*?\bwith\b\s+(?<with>.*?))?' .
+            '(?:.*?\bwithout\b\s+(?<without>.*))?' .
+            '$/siu',
+            $norm,
+            $m
+        )) {
+            $qty     = $this->toQty($m['qty'] ?? null) ?: 1;
+            $id      = (int)($m['id'] ?? 0);
+            $adds    = $this->splitList($m['with'] ?? '');
+            $removes = $this->splitList($m['without'] ?? '');
 
-            if ($id === null) return ['action' => 'noop', 'items' => $this->all()];
-            $this->decrementLine($id, $size, max(1, $qty ?? 1));
-            return ['action' => 'remove', 'items' => $this->all()];
+            $ok = $this->addByMenuId($id, $qty, $adds, $removes);
+            return ['action' => $ok ? 'add' : 'noop', 'items' => $this->all()];
         }
 
-        // ADD (default)
-        if (preg_match('/^\s*(i want|i would like|add|plus|give me|include|can i have|get me|yeah)\b/u', $t)) {
-            [$qty, $id] = $this->extractQtyAndId($t);
-            $qty    = max(1, $qty ?? 1);
-            $size   = $this->extractSize($t);
-            $add    = $this->extractToppings($t, '(?:with|add)\s+');
-            $remove = array_merge(
-                $this->extractToppings($t, '(?:without|no)\s+'),
-                $this->extractToppings($t, 'hold\s+')
-            );
-
-            if ($id === null) return ['action' => 'noop', 'items' => $this->all()];
-
-            $this->addLine($id, $qty, $size, $add, $remove);
-            return ['action' => 'add', 'items' => $this->all()];
+        // Fallback: “add a cheeseburger with …” (name lookup)
+        if (preg_match(
+            '/^(?:add|and|also|plus|i\s+want|give\s+me|include)\s+' .
+            '(?<name>.+?)' .
+            '(?:\s+\bwith\b\s+(?<with>.*?))?' .
+            '(?:\s+\bwithout\b\s+(?<without>.*))?' .
+            '$/siu',
+            $norm,
+            $m
+        )) {
+            $name    = trim($m['name'] ?? '');
+            $adds    = $this->splitList($m['with'] ?? '');
+            $removes = $this->splitList($m['without'] ?? '');
+            $ok = $this->addByName($name, 1, $adds, $removes);
+            return ['action' => $ok ? 'add' : 'noop', 'items' => $this->all()];
         }
 
-        // Fallback: try to interpret “add … #id …”
-        [$qty, $id] = $this->extractQtyAndId($t);
-        if ($id !== null) {
-            $qty    = max(1, $qty ?? 1);
-            $size   = $this->extractSize($t);
-            $add    = $this->extractToppings($t, '(?:with|add)\s+');
-            $remove = array_merge(
-                $this->extractToppings($t, '(?:without|no)\s+'),
-                $this->extractToppings($t, 'hold\s+')
-            );
-            $this->addLine($id, $qty, $size, $add, $remove);
-            return ['action' => 'add', 'items' => $this->all()];
+        // REMOVE examples: "remove number 3", "remove #1", "remove lemonade"
+        if (preg_match(
+            '/^(?:remove|delete|drop|minus)\s+' .
+            '(?:a|an)?\s*(?:number|no\.|#)?\s*(?<id>\d+)\b' .
+            '$/siu',
+            $norm,
+            $m
+        )) {
+            $id = (int)($m['id'] ?? 0);
+            $ok = $this->decrementById($id, 1);
+            return ['action' => $ok ? 'remove' : 'noop', 'items' => $this->all()];
+        }
+        if (preg_match('/^(?:remove|delete|drop|minus)\s+(?<name>.+)$/siu', $norm, $m)) {
+            $ok = $this->decrementByName(trim($m['name']), 1);
+            return ['action' => $ok ? 'remove' : 'noop', 'items' => $this->all()];
         }
 
         return ['action' => 'noop', 'items' => $this->all()];
     }
 
-    // ---------------- Line mutations ----------------
-    private function addLine(int $id, int $qty, ?string $size, array $add, array $remove): void
+    /** ---------- Internals ---------- */
+
+    private function normalize(string $s): string
     {
-        $cat = $this->catalog();
-        if (!isset($cat[$id])) return;
+        $s = trim($s ?? '');
 
-        $menu = $cat[$id];
-        $size = $menu['size'] ?? $size; // prefer catalog default if set
+        // collapse spaces
+        $s = preg_replace('/\s+/u', ' ', $s) ?? $s;
 
-        $lines = $this->all();
+        // strip trailing punctuation like ".", "!", "?"
+        $s = preg_replace('/[.!?]+$/u', '', $s) ?? $s;
 
-        $idx = $this->findMergeIndex($lines, $id, $size, $add, $remove);
-        if ($idx !== null) {
-            $lines[$idx]['quantity'] += $qty;
-        } else {
-            $lines[] = [
-                'id'       => $id,
-                'name'     => $menu['name'],
-                'type'     => $menu['type'],
-                'category' => $menu['category'] ?? ($menu['type'] === 'drink' ? 'drink' : 'food'),
-                'size'     => $size,
-                'price'    => (float) $menu['price'],
-                'toppings' => null,
-                'quantity' => $qty,
-                'add'      => $add ?: null,
-                'remove'   => $remove ?: null,
-            ];
-        }
+        // SPECIAL: "and at ..." → "add ..."
+        $s = preg_replace('/^\s*(?:and\s+at)\b[,:-]?\s*/iu', 'add ', $s) ?? $s;
 
-        $this->save($lines);
+        // If it *starts* with 'and/also/plus/...' treat as "add ..."
+        $s = preg_replace('/^\s*(?:and|also|plus|yeah|yep|ok|okay|uh|um|please|then)\b[,:-]?\s*/iu', 'add ', $s) ?? $s;
+
+        // "at" at start, but only if followed by number marker or digits → treat as add
+        // e.g. "at number 27" or "at #5" or "at 12"
+        $s = preg_replace('/^\s*at\b(?=\s+(?:a|an)?\s*(?:number|no\.|#|\d+))/iu', 'add ', $s) ?? $s;
+
+        // Convert "number two"/"no. two"/"#two" -> "number 2"
+        $s = preg_replace_callback(
+            '/\b(?:number|no\.|#)\s*' .
+            '(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\b/iu',
+            fn($m) => 'number ' . ($this->toQty($m[1]) ?: 0),
+            $s
+        ) ?? $s;
+
+        return $s;
     }
 
-    private function decrementLine(int $id, ?string $size, int $qty): void
+
+
+    private function isClear(string $s): bool
     {
-        $lines = $this->all();
-        foreach ($lines as $i => $line) {
-            if ((int)$line['id'] === $id && (($line['size'] ?? null) === $size || $size === null)) {
-                $lines[$i]['quantity'] -= $qty;
-                if ($lines[$i]['quantity'] <= 0) {
-                    unset($lines[$i]);
-                    $lines = array_values($lines);
-                }
-                break;
+        $lc = mb_strtolower(trim($s));
+        return
+            preg_match('/^\s*(clear|reset)\s*(list|order)?\s*[.?]?\s*$/u', $lc) ||
+            preg_match('/^\s*(delete|wipe|erase)\s+(list|order)\s*[.?]?\s*$/u', $lc) ||
+            preg_match('/^\s*(new|create new|start new)\s+(list|order)\s*[.?]?\s*$/u', $lc);
+    }
+
+    private function toQty(?string $s): int
+    {
+        if (!$s) return 0;
+        $s = mb_strtolower(trim($s));
+        if (ctype_digit($s)) return max(1, (int)$s);
+        $map = [
+            'one'=>1,'two'=>2,'three'=>3,'four'=>4,'five'=>5,'six'=>6,
+            'seven'=>7,'eight'=>8,'nine'=>9,'ten'=>10,'eleven'=>11,'twelve'=>12
+        ];
+        return $map[$s] ?? 0;
+    }
+
+    private function splitList(string $s): array
+    {
+        $s = trim($s);
+        if ($s === '') return [];
+        // split on commas or “and”/&
+        $parts = preg_split('/\s*(?:,|and|&)\s*/iu', $s) ?: [];
+        $parts = array_map(fn($p) => $this->title(trim($p)), $parts);
+        return array_values(array_filter($parts, fn($p) => $p !== ''));
+    }
+
+    /** Session structure: array of lines keyed by a unique key (id+size+add/remove set) */
+    private function addByMenuId(int $id, int $qty, array $add, array $remove): bool
+    {
+        $menu = $this->menu();
+        $menuItem = $menu[$id] ?? null;
+        if (!$menuItem) return false;
+
+        $items = $this->all();
+        $key = $this->lineKey($id, $menuItem['size'] ?? null, $add, $remove);
+
+        if (!isset($items[$key])) {
+            $items[$key] = $this->makeLine($menuItem, $qty, $add, $remove);
+        } else {
+            $items[$key]['quantity'] = max(1, (int)$items[$key]['quantity'] + max(1, $qty));
+            // de-dup adds/removes
+            $items[$key]['add'] = $this->uniqueList(array_merge($items[$key]['add'] ?? [], $add));
+            $items[$key]['remove'] = $this->uniqueList(array_merge($items[$key]['remove'] ?? [], $remove));
+        }
+        $this->session->put($this->key, $items);
+        return true;
+    }
+
+    private function addByName(string $name, int $qty, array $add, array $remove): bool
+    {
+        if ($name === '') return false;
+        $menu = $this->menu();
+        // simple case-insensitive name match (first match)
+        foreach ($menu as $id => $m) {
+            if (mb_strtolower($m['name']) === mb_strtolower($name)) {
+                return $this->addByMenuId((int)$id, $qty, $add, $remove);
             }
         }
-        $this->save($lines);
+        return false;
     }
 
-    private function findMergeIndex(array $lines, int $id, ?string $size, array $add, array $remove): ?int
+    private function decrementById(int $id, int $qty): bool
     {
-        $norm = fn($arr) => array_values(array_unique(array_map([$this,'normTopping'], $arr)));
-        $a = $norm($add); sort($a);
-        $r = $norm($remove); sort($r);
-
-        foreach ($lines as $i => $line) {
-            if ((int)$line['id'] !== $id) continue;
-            if (($line['size'] ?? null) !== $size) continue;
-
-            $la = $norm($line['add'] ?? []); sort($la);
-            $lr = $norm($line['remove'] ?? []); sort($lr);
-
-            if ($la === $a && $lr === $r) return $i;
-        }
-        return null;
-    }
-
-    // ---------------- Parsers ----------------
-    private function isClearCommand(string $t): bool
-    {
-        return (bool) preg_match('/\b(clear|reset|new)\s+(order|cart)\b/u', $t);
-    }
-
-    /** Returns [qty|null, id|null] */
-    private function extractQtyAndId(string $t): array
-    {
-        $qty = null;
-
-        // digits before "#" → "add 2 #20"
-        if (preg_match('/\badd\s+(\d+)\b/u', $t, $m)) {
-            $qty = (int) $m[1];
-        } else {
-            // word-numbers (e.g., "add two #20")
-            [$wqty] = $this->extractLeadingWordNumber($t);
-            if ($wqty !== null) $qty = $wqty;
-        }
-
-        // #id or "number 3"
-        $id = null;
-        if (preg_match('/#\s*(\d+)/u', $t, $m)) {
-            $id = (int) $m[1];
-        } elseif (preg_match('/\bnumber\s+(\d+)/u', $t, $m)) {
-            $id = (int) $m[1];
-        }
-
-        return [$qty, $id];
-    }
-
-    private function extractSize(string $t): ?string
-    {
-        if (preg_match('/\blarge\b/u', $t))   return 'Large';
-        if (preg_match('/\bregular\b/u', $t)) return 'Regular';
-        return null;
-    }
-
-    private function extractToppings(string $t, string $prefix): array
-    {
-        if (!preg_match('/'.$prefix.'([^.,;]+)/u', $t, $m)) return [];
-        $chunk = $m[1];
-        $parts = preg_split('/\s*(?:,|and)\s*/u', $chunk) ?: [];
-        $parts = array_map('trim', $parts);
-
-        $known = $this->KNOWN_TOPPINGS;
-        $norm = fn($s) => preg_replace('/\s+/', ' ', trim(mb_strtolower($s)));
-        $out  = [];
-
-        foreach ($parts as $p) {
-            $np = $norm($p);
-            if ($np === '' || in_array($np, ['with','add','no','without','hold'], true)) continue;
-            // exact allow-list match
-            foreach ($known as $k) {
-                if ($np === $k) { $out[] = $this->title($k); continue 2; }
+        $items = $this->all();
+        $changed = false;
+        foreach ($items as $k => $line) {
+            if ((int)$line['id'] === $id) {
+                $newQty = max(0, ((int)($line['quantity'] ?? 1)) - max(1, $qty));
+                if ($newQty === 0) unset($items[$k]); else $items[$k]['quantity'] = $newQty;
+                $changed = true;
             }
-            // single-word fallback (e.g., "ketchup")
-            if (in_array($np, $known, true)) $out[] = $this->title($np);
         }
-
-        return array_values(array_unique($out));
+        if ($changed) $this->session->put($this->key, $items);
+        return $changed;
     }
 
-    private function normTopping(string $t): string
+    private function decrementByName(string $name, int $qty): bool
     {
-        return $this->title(mb_strtolower(trim($t)));
+        $items = $this->all();
+        $changed = false;
+        foreach ($items as $k => $line) {
+            if (mb_strtolower($line['name'] ?? '') === mb_strtolower($name)) {
+                $newQty = max(0, ((int)($line['quantity'] ?? 1)) - max(1, $qty));
+                if ($newQty === 0) unset($items[$k]); else $items[$k]['quantity'] = $newQty;
+                $changed = true;
+            }
+        }
+        if ($changed) $this->session->put($this->key, $items);
+        return $changed;
+    }
+
+    private function makeLine(array $menuItem, int $qty, array $add, array $remove): array
+    {
+        return [
+            'id'       => (int)$menuItem['id'],
+            'name'     => (string)$menuItem['name'],
+            'price'    => (float)$menuItem['price'],
+            'type'     => (string)$menuItem['type'],
+            'category' => $menuItem['category'] ?? null,
+            'size'     => $menuItem['size'] ?? null,
+            'toppings' => $menuItem['toppings'] ?? null,
+            'quantity' => max(1, $qty),
+            'add'      => $this->uniqueList($add),
+            'remove'   => $this->uniqueList($remove),
+        ];
+    }
+
+    private function uniqueList(array $xs): array
+    {
+        $seen = [];
+        $out = [];
+        foreach ($xs as $x) {
+            $k = mb_strtolower(trim($x));
+            if ($k === '') continue;
+            if (isset($seen[$k])) continue;
+            $seen[$k] = true;
+            $out[] = $this->title($x);
+        }
+        return $out;
+    }
+
+    private function lineKey(int $id, ?string $size, array $add, array $remove): string
+    {
+        sort($add, SORT_NATURAL | SORT_FLAG_CASE);
+        sort($remove, SORT_NATURAL | SORT_FLAG_CASE);
+        return $id . '|' . ($size ?? 'none') . '|' . implode(',', $add) . '|' . implode(',', $remove);
+        // This guarantees “same id + same size + same modifiers” is merged.
     }
 
     private function title(string $s): string
     {
-        return mb_convert_case($s, MB_CASE_TITLE, 'UTF-8');
+        return mb_convert_case(trim($s), MB_CASE_TITLE, 'UTF-8');
     }
 
-    /** crude word-number parser at the start; returns [qty|null, rest?] (rest unused here) */
-    private function extractLeadingWordNumber(string $s): array
+    /** Load menu items keyed by id for fast lookup. Expects config/menu.php -> ['items'=>[...]] */
+    private function menu(): array
     {
-        $tokens = preg_split('/\s+/u', trim($s)) ?: [];
-        if (!$tokens) return [null, $s];
-
-        $units = [
-            'zero'=>0,'one'=>1,'two'=>2,'to'=>2,'three'=>3,'four'=>4,'for'=>4,'five'=>5,'six'=>6,'seven'=>7,'eight'=>8,'nine'=>9,
-            'ten'=>10,'eleven'=>11,'twelve'=>12,'thirteen'=>13,'fourteen'=>14,'fifteen'=>15,'sixteen'=>16,'seventeen'=>17,'eighteen'=>18,'nineteen'=>19,
-        ];
-        $tens = ['twenty'=>20,'thirty'=>30,'forty'=>40,'fifty'=>50,'sixty'=>60,'seventy'=>70,'eighty'=>80,'ninety'=>90];
-        $scales = ['hundred'=>100,'thousand'=>1000];
-
-        $i=0; $acc=0; $used=false;
-        while ($i < count($tokens)) {
-            $w = mb_strtolower($tokens[$i]);
-            if ($w === 'and') { $i++; continue; }
-            if (isset($units[$w])) { $acc += $units[$w]; $i++; $used=true; continue; }
-            if (isset($tens[$w]))  { $acc += $tens[$w];  $i++; $used=true; continue; }
-            if (isset($scales[$w])){ $acc = max(1,$acc) * $scales[$w]; $i++; $used=true; continue; }
-            break;
+        $items = config('menu.items', []);
+        $out = [];
+        foreach ($items as $m) {
+            // ensure id is the key
+            $out[(int)$m['id']] = $m + ['id' => (int)$m['id']];
         }
-        if (!$used) return [null, $s];
-        $rest = implode(' ', array_slice($tokens, $i));
-        return [$acc, $rest];
+        return $out;
     }
 }
