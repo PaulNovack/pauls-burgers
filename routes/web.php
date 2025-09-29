@@ -2,6 +2,8 @@
 
 use App\Http\Controllers\ListFromAsrController;
 use App\Http\Controllers\ListFromTextController;
+use App\Http\Controllers\OrderFromAsrController;
+use App\Http\Controllers\OrderFromTextController;
 use Illuminate\Foundation\Http\Middleware\VerifyCsrfToken;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Http\Request;
@@ -19,6 +21,9 @@ Route::post('/audio/chunk', function (Request $request) {
     return response()->json(['ok' => true]);
 });
 
+
+Route::post('/order/asr', OrderFromAsrController::class)->name('order.asr');
+Route::post('/order/command', OrderFromTextController::class)->name('order.command');
 
 Route::post('/list/from-audio', ListFromAsrController::class); // expects: audio=<file>
 Route::post('/list/from-text',  ListFromTextController::class)->withoutMiddleware([VerifyCsrfToken::class]);

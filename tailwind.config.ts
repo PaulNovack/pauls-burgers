@@ -5,6 +5,14 @@ export default {
         './resources/**/*.blade.php',
         './resources/**/*.{vue,js,ts}',
     ],
-    theme: { extend: {} },
+    theme: {
+        extend: {
+            fontFamily: {
+                chewy: ['Chewy', 'cursive'],
+                baloo: ['"Baloo 2"', 'sans-serif'],
+                fredoka: ['Fredoka', 'sans-serif'],
+            },
+        },
+    },
     plugins: [],
 }

@@ -7,6 +7,7 @@
     <title>WebRTC + VAD + Faster-Whisper</title>
     @vite(['resources/js/app.ts'])
     <meta name="csrf-token" content="{{ csrf_token() }}">
+
     <style>
         [v-cloak]{display:none}
         body { font-family: system-ui, sans-serif; }

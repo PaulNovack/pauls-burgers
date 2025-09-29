@@ -1,16 +1,68 @@
 <template>
-    <div class="flex flex-1">
+    <div class="flex flex-1 bg-orange-50">
         <!-- Left Column (2/5) -->
-        <div class="w-4/14 p-2">
-            Left Column (4/14)
+        <div class="w-4/14 p-2 font-fredoka text-xl text-center bg-cyan-100">
+            <div class="p-4">
+                <h2 class="text-xl mb-3 border-b-2">Your Order</h2>
+
+                <div class="grid grid-cols-[64px_1fr_auto] gap-3 items-center">
+
+
+                    <!-- lines -->
+                    <template v-for="line in myOrder" :key="line.id">
+                        ({{ line.quantity }})
+
+                        <div class="text-md text-left leading-tight">
+                            {{ line.name }}
+                            <span v-if="line.size">({{ line.size }})</span>
+
+                            <!-- Add / Without line -->
+                            <div
+                                v-if="(line.add && line.add.length) || (line.remove && line.remove.length)"
+                                class="mt-1 text-xs"
+                            >
+                              <span v-if="line.add && line.add.length">
+                                Add: {{ (line.add || []).join(', ') }}
+                              </span>
+                                <span v-if="line.remove && line.remove.length">
+                                <template v-if="line.add && line.add.length"> • </template>
+                                Without: {{ (line.remove || []).join(', ') }}
+                              </span>
+                            </div>
+                        </div>
+
+                        <div class="text-sm text-right font-medium">
+                            {{ formatPrice(line.price * line.quantity) }}
+                        </div>
+                    </template>
+
+                    <!-- totals -->
+                    <div class="col-span-3 border-t border-gray-900 dark:border-gray-900 my-2"></div>
+
+                    <div></div>
+                    <div class="text-md text-gray-600 text-right">Subtotal</div>
+                    <div class="text-md">{{ formatPrice(subtotal) }}</div>
+
+                    <div></div>
+                    <div class="text-md text-gray-600 text-right">Tax (8%)</div>
+                    <div class="text-md text-right">{{ formatPrice(tax) }}</div>
+
+                    <div class="col-span-3 border-t border-gray-900 dark:border-gray-800 my-2"></div>
+
+                    <div></div>
+                    <div class="text-md font-semibold text-right">Total</div>
+                    <div class="text-md  font-semibold text-right">{{ formatPrice(total) }}</div>
+                </div>
+            </div>
         </div>
 
+
         <!-- Right Column (5/14) -->
-        <div class="w-5/14 pt-2">
+        <div class="w-5/14 pt-2 px-2">
             <section >
                 <!-- Header / Search -->
                 <header class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                    <h2 class="text-xl font-semibold"><u>Burgers</u>
+                    <h2 class="text-xl font-semibold font-fredoka"><u>Burgers</u>
                     </h2>
 
                 </header>
@@ -23,7 +75,7 @@
                         class="p-1"
                     >
                         <div class="flex items-start justify-between gap-3">
-                            <h3 class="text-md font-semibold leading-snug">#{{item.id}} {{ item.name }}</h3>
+                            <h3 class="text-md font-semibold leading-snug font-fredoka">#{{item.id}} {{ item.name }}</h3>
                             <div class="shrink-0 rounded-full px-3 py-1 text-xs font-medium bg-gray-100 dark:bg-gray-800">
                                 {{ formatPrice(item.price) }}
                             </div>
@@ -45,7 +97,7 @@
             <section >
                 <!-- Header / Search -->
                 <header class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                    <h2 class="text-xl font-semibold"><u>Sides</u></h2>
+                    <h2 class="text-xl font-semibold font-fredoka"><u>Sides</u></h2>
 
                 </header>
 
@@ -57,7 +109,7 @@
                         class="pt-2"
                     >
                         <div class="flex items-start justify-between gap-3">
-                            <h3 class="text-md font-semibold leading-snug">{{ group.name }}</h3>
+                            <h3 class="text-md font-semibold leading-snug font-fredoka">{{ group.name }}</h3>
                             <div class="flex gap-2 flex-wrap">
                                 <div
                                     v-for="v in group.variants"
@@ -82,7 +134,7 @@
             <section >
                 <!-- Header / Search -->
                 <header class="flex flex-col pt-4 gap-2 sm:flex-row sm:items-center sm:justify-between">
-                    <h2 class="text-xl font-semibold"><u>Drinks</u></h2>
+                    <h2 class="text-xl font-semibold font-fredoka"><u>Drinks</u></h2>
 
                 </header>
 
@@ -94,7 +146,7 @@
                         class="pt-2"
                     >
                         <div class="flex items-start justify-between gap-3">
-                            <h3 class="text-md font-semibold leading-snug">{{ group.name }}</h3>
+                            <h3 class="text-md font-semibold leading-snug font-fredoka">{{ group.name }}</h3>
                             <div class="flex gap-2 flex-wrap">
                                 <div
                                     v-for="v in group.variants"
@@ -125,6 +177,7 @@
 
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import RecordButton from '@/components/RecordButton.vue' // the VAD button you already built
 
 
 type Variant = { id: number; size: string | null; price: number }
@@ -197,10 +250,30 @@ type Burger = {
     size: string | null
     price: number
 }
+type burgerToppings = [
+    topping: string
+]
+
+type OrderItem = Burger & {
+    quantity: number
+    remove: Topping[] | null
+    add: Topping[] | null
+}
 
 const props = defineProps<{
     items?: Burger[]
 }>()
+
+
+type Topping = string;
+
+const burgerToppings: Topping[] = [
+    "2 Beef Patties","American Cheese","Avocado","Bacon","BBQ Sauce","Beef Patty",
+    "Blue Cheese Crumbles","Caramelized Onions","Cheddar Cheese","Chipotle Mayo",
+    "Grilled Mushrooms","Jalapeños","Ketchup","Lettuce","Mustard","Onion",
+    "Onion Rings","Pepper Jack Cheese","Pickles","Quarter Pound Beef Patty",
+    "Swiss Cheese","Tomato","Veggie Patty",
+];
 
 // Default data (your 13-item menu). Pass `:items="yourData"` to override.
 const defaultItems: Burger[] = [
@@ -260,7 +333,24 @@ const defaultItems: Burger[] = [
     { "id": 52, "name": "Vanilla Milkshake", "price": 4.49, "type": "drink", "category": "drink", "size": "Large" }
 ]
 
+const myOrder: OrderItem[] = [
+    { "id": 3, "remove":['Ketchup','Mustard'], "add": null, "quantity": 2, "name": "Bacon Burger", "toppings": ["Beef Patty","Bacon","Cheddar Cheese","BBQ Sauce"], "price": 7.49, "type": "burger", "category": "food", "size": null },
+    { "id": 20, "add": null, "remove": null, "quantity": 2, "name": "French Fries", "price": 3.99, "type": "side", "category": "food", "size": "Large" },
+    { "id": 46, "add": null, "remove": null, "quantity": 1, "name": "Lemonade", "price": 2.49, "type": "drink", "category": "drink", "size": "Large" },
+    { "id": 52, "add": null, "remove": null, "quantity": 1,"name": "Vanilla Milkshake", "price": 4.49, "type": "drink", "category": "drink", "size": "Large" },
+]
 
+// make quantities editable; default to 1
+type OrderLine = Burger & { qty: number }
+const lines = ref<OrderLine[]>(myOrder.map(i => ({ ...i, qty: 1 })))
+
+const subtotal = computed(() =>
+    lines.value.reduce((sum, l) => sum + l.price * (l.qty || 0), 0)
+)
+
+const taxRate = 0.08
+const tax = computed(() => subtotal.value * taxRate)
+const total = computed(() => subtotal.value + tax.value)
 
 
 const data = computed<Burger[]>(() => props.items?.length ? props.items : defaultItems)

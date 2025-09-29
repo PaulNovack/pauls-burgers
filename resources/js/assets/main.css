@@ -1,5 +1,5 @@
+@import url("https://fonts.googleapis.com/css2?family=Fredoka&display=swap");
 @import "tailwindcss";
-
 /* Larger, fluid base size (mobile > desktop keeps comfy) */
 @layer base {
     html, body { height: 100%; }
@@ -8,7 +8,11 @@
     body { @apply bg-white text-gray-900 dark:bg-gray-900 dark:text-gray-100; }
 }
 
-/* Optional: ensure minimum tap target */
+
+/* Make a utility class Tailwind can apply */
 @layer utilities {
+    .font-fredoka { font-family: "Fredoka", cursive; }
     .touch-target { min-height: 44px; min-width: 44px; }
 }
+
+
