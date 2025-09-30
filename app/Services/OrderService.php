@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use Illuminate\Contracts\Session\Session;
+use Illuminate\Support\Facades\Log;
 
 class OrderService
 {
@@ -26,9 +27,11 @@ class OrderService
     /** Main entry: parse a natural command and mutate order in session */
     public function processCommand(string $text): array
     {
+
+        Log::info('Process Command text', [$text]);
         // 1) Normalize raw ASR text
         $norm = $this->normalize($text);
-
+        Log::info('Process Command normalized text', [$norm]);
         // 2) Clear order
         if ($this->isClear($norm)) {
             return ['action' => 'clear', 'items' => $this->clear()];
@@ -60,11 +63,20 @@ class OrderService
                 $id     = $this->wordsToNumber($phrase); // 0..99+
             }
 
-            $adds    = $this->splitList($m['with'] ?? '');
-            $removes = $this->splitList($m['without'] ?? '');
-
+            $addsRaw    = $this->splitList($m['with'] ?? '');
+            $removesRaw = $this->splitList($m['without'] ?? '');
+            $adds       = $this->resolveModifierList($addsRaw);
+            $removes    = $this->resolveModifierList($removesRaw);
+            Log::info('Process Command #3 Match', [
+                'id' => $id,
+                'phrase' => $phrase ?? null,
+                'adds' =>$adds,
+                'removes' => $removes,
+                'addsRaw' => $addsRaw,
+                'removesRaw' => $removesRaw]);
             // ID wins; if size was spoken, the chosen line's size comes from the menu id anyway
             $ok = $id > 0 ? $this->addByMenuId($id, $qty, $adds, $removes) : false;
+
             return ['action' => $ok ? 'add' : 'noop', 'items' => $this->all()];
         }
 
@@ -85,9 +97,19 @@ class OrderService
             $qty     = $this->toQty($m['qty'] ?? '') ?: 1;
             $size    = $this->normalizeSize($m['size'] ?? null);
             $name    = trim($m['name'] ?? '');
-            $adds    = $this->splitList($m['with'] ?? '');
-            $removes = $this->splitList($m['without'] ?? '');
-
+            $addsRaw    = $this->splitList($m['with'] ?? '');
+            $removesRaw = $this->splitList($m['without'] ?? '');
+            $adds       = $this->resolveModifierList($addsRaw);
+            $removes    = $this->resolveModifierList($removesRaw);
+            Log::info('Process Command #4 Match', [
+                'name' => $name,
+                'size' => $size,
+                'qty' => $qty,
+                'phrase' => $phrase ?? null,
+                'adds' =>$adds,
+                'removes' => $removes,
+                'addsRaw' => $addsRaw,
+                'removesRaw' => $removesRaw]);
             $ok = $this->addByName($name, $qty, $adds, $removes, $size);
             return ['action' => $ok ? 'add' : 'noop', 'items' => $this->all()];
         }
@@ -103,9 +125,19 @@ class OrderService
             $m
         )) {
             $name    = trim($m['name'] ?? '');
-            $adds    = $this->splitList($m['with'] ?? '');
-            $removes = $this->splitList($m['without'] ?? '');
+            $addsRaw    = $this->splitList($m['with'] ?? '');
+            $removesRaw = $this->splitList($m['without'] ?? '');
+            $adds       = $this->resolveModifierList($addsRaw);
+            $removes    = $this->resolveModifierList($removesRaw);
             $ok = $this->addByName($name, 1, $adds, $removes, null);
+            Log::info('Process Command #5 Match', ['phrase' => $phrase,
+                'id' => $name,
+                'adds' =>$adds,
+                'removes' => $removes,
+                'addsRaw' => $addsRaw,
+                'removesRaw' => $removesRaw,
+                'ok => $ok']);
+
             return ['action' => $ok ? 'add' : 'noop', 'items' => $this->all()];
         }
 
@@ -138,18 +170,177 @@ class OrderService
             $needRemove = $this->splitList($m['without'] ?? '');
 
             $ok = $id > 0 ? $this->decrementByIdWithMods($id, $qty, $size, $needAdd, $needRemove) : false;
+            Log::info('Process Command #5 Match', [
+                'id' => $id,
+                'phrase' => $phrase ?? null,
+                'qty' => $qty,
+                'size' => $size,
+                'needAdd' => $needAdd,
+                'needRemove' => $needRemove,
+                'ok => $ok']);
+
             return ['action' => $ok ? 'remove' : 'noop', 'items' => $this->all()];
         }
 
-        // 7) Simple REMOVE by name (fallback), qty defaults to 1, no size/mod filters
-        if (preg_match('/^(?:remove|delete|drop|minus)\s+(?<name>.+)$/siu', $norm, $m)) {
-            $ok = $this->decrementByName(trim($m['name']), 1);
+        // NEW: 7) REMOVE by qty? + [size]? + name (+ with/without)
+        // Examples: "remove regular french fries", "remove two large onion rings",
+        // "remove fries without ketchup"
+        if (preg_match(
+            '/^(?:remove|delete|drop|minus|take\s+off)\s+' .
+            '(?:(?<qty>\d+|one|two|to|too|three|four|for|five|six|seven|eight|nine|ten|eleven|twelve)\s+)?' . // optional qty
+            '(?:(?<size>small|regular|large)\s+)?' .                                                          // optional size
+            '(?<name>.+?)(?=\s+(?:with|without)\b|$)' .                                                      // name until with/without or end
+            '(?:\s+\bwith\b\s+(?<with>.*?))?' .
+            '(?:\s+\bwithout\b\s+(?<without>.*))?' .
+            '$/siu',
+            $norm,
+            $m
+        )) {
+            $qty     = $this->toQty($m['qty'] ?? '') ?: 1;
+            $size    = $this->normalizeSize($m['size'] ?? null);
+            $name    = trim($m['name'] ?? '');
+            $needAdd    = $this->splitList($m['with'] ?? '');
+            $needRemove = $this->splitList($m['without'] ?? '');
+
+            // Find the menu id by (name, size) similarly to addByName()
+            $id = $this->findMenuIdByName($name, $size);
+            $ok = $id ? $this->decrementByIdWithMods($id, $qty, $size, $needAdd, $needRemove) : false;
+
             return ['action' => $ok ? 'remove' : 'noop', 'items' => $this->all()];
         }
+
 
         // 8) No recognized action
         return ['action' => 'noop', 'items' => $this->all()];
     }
+
+    /** Resolve a spoken name (and optional size) to a concrete menu id, or null if none. */
+    private function findMenuIdByName(string $spokenName, ?string $size): ?int
+    {
+        $spoken = $this->normName($spokenName);
+        if ($spoken === '') return null;
+
+        $menu = $this->menu();
+
+        // 1) Exact normalized name + size (ONLY if size was specified)
+        if ($size !== null) {
+            foreach ($menu as $idx => $m) {
+                $itemId = (int)($m['id'] ?? $idx);
+                if ($this->normName($m['name'] ?? '') === $spoken && $this->sizeMatches($m['size'] ?? null, $size)) {
+                    return $itemId;
+                }
+            }
+        }
+
+        // 2) Exact name, ignore size → pick preferred size
+        $cands = [];
+        foreach ($menu as $idx => $m) {
+            if ($this->normName($m['name'] ?? '') === $spoken) {
+                $cands[] = $m + ['id' => (int)($m['id'] ?? $idx)];
+            }
+        }
+        if ($cands) {
+            $picked = $this->pickBySize($cands, $size); // prefers Regular, then Large
+            return (int)$picked['id'];
+        }
+
+        // 3) Token-subset fallback
+        $spokenTokens = array_filter(explode(' ', $spoken));
+        $best = null;
+        $bestScore = -1;
+        foreach ($menu as $idx => $m) {
+            $nm = $this->normName($m['name'] ?? '');
+            $menuTokens = array_filter(explode(' ', $nm));
+            $hit = 0;
+            foreach ($spokenTokens as $t) if (in_array($t, $menuTokens, true)) $hit++;
+            if ($hit > 0 && $this->sizeMatches($m['size'] ?? null, $size)) {
+                $score = $hit * 10 + (int)str_starts_with($nm, $spoken);
+                if ($score > $bestScore) { $bestScore = $score; $best = $m + ['id' => (int)($m['id'] ?? $idx)]; }
+            }
+        }
+        if ($best) return (int)$best['id'];
+
+        // 4) Levenshtein fallback
+        $bestId = null; $bestDist = PHP_INT_MAX;
+        foreach ($menu as $idx => $m) {
+            $d = levenshtein($spoken, $this->normName($m['name'] ?? ''));
+            if ($d < $bestDist) { $bestDist = $d; $bestId = (int)($m['id'] ?? $idx); }
+        }
+        return ($bestId !== null && $bestDist <= 3) ? $bestId : null;
+    }
+
+
+    /** Canonicalize spoken modifiers to menu-friendly names (multi-word supported). */
+    private array $modifierSynonyms = [
+        // cheeses
+        'Cheddar Cheese'   => ['cheddar', 'cheddar cheese', 'extra cheddar'],
+        'Swiss Cheese'     => ['swiss', 'swiss cheese'],
+        'American Cheese'  => ['american', 'american cheese'],
+        'Pepper Jack'      => ['pepper jack', 'pepperjack'],
+        'Blue Cheese'      => ['blue cheese', 'bleu cheese', 'bleu'],
+        // common toppings
+        'Bacon'            => ['bacon', 'crispy bacon'],
+        'Onion'            => ['onion', 'onions', 'grilled onion', 'grilled onions'],
+        'Pickle'           => ['pickle', 'pickles'],
+        'Tomato'           => ['tomato', 'tomatoes'],
+        'Lettuce'          => ['lettuce'],
+        'Jalapeno'         => ['jalapeno', 'jalapenos', 'jalapeño', 'jalapeños'],
+        // sauces
+        'Ketchup'          => ['ketchup'],
+        'Mustard'          => ['mustard', 'yellow mustard'],
+        'Mayo'             => ['mayo', 'mayonnaise'],
+        'BBQ Sauce'        => ['bbq', 'bbq sauce', 'barbecue', 'barbeque'],
+    ];
+
+    /** Convert a raw list like ["cheddar cheese", "bacon"] → ["Cheddar Cheese", "Bacon"] */
+    private function resolveModifierList(array $xs): array
+    {
+        $out = [];
+        foreach ($xs as $frag) {
+            $can = $this->canonicalizeModifier($frag);
+            if ($can !== '') $out[] = $can;
+        }
+        return $this->uniqueList($out);
+    }
+
+    /** Map one phrase to a canonical topping name (exact/synonym/fuzzy). */
+    private function canonicalizeModifier(string $s): string
+    {
+        $raw = mb_strtolower(trim($s));
+        if ($raw === '') return '';
+
+        // exact pass through for already-canonical title-case items
+        $title = $this->title($s);
+        foreach (array_keys($this->modifierSynonyms) as $canon) {
+            if ($title === $canon) return $canon;
+        }
+
+        // synonym tables (exact lowercase match)
+        foreach ($this->modifierSynonyms as $canon => $variants) {
+            foreach ($variants as $v) {
+                if ($raw === mb_strtolower($v)) return $canon;
+            }
+        }
+
+        // light fuzzy: if user said just "cheddar." with punctuation stripped, catch close hits
+        $bestCanon = '';
+        $bestDist  = 3; // allow small typos (0..3)
+        foreach ($this->modifierSynonyms as $canon => $variants) {
+            foreach ($variants as $v) {
+                $d = levenshtein($raw, mb_strtolower($v));
+                if ($d < $bestDist) { $bestDist = $d; $bestCanon = $canon; }
+            }
+            // also compare to the canonical label itself
+            $d2 = levenshtein($raw, mb_strtolower($canon));
+            if ($d2 < $bestDist) { $bestDist = $d2; $bestCanon = $canon; }
+        }
+
+        if ($bestCanon !== '') return $bestCanon;
+
+        // fallback: keep as Title Case (so novel toppings still work)
+        return $title;
+    }
+
 
     /** Normalize number-word phrases and convert to an integer (supports 0..999+). */
     private function wordsToNumber(string $s): int
@@ -292,6 +483,16 @@ class OrderService
 
 
     /** ---------- Internals ---------- */
+
+    private function singularize(string $w): string
+    {
+        // basic English singularization for menu nouns
+        if (preg_match('/(.*[^aeiou])ies$/u', $w, $m)) return $m[1].'y'; // fries -> fry, tomatoes -> tomato
+        if (preg_match('/(.*)es$/u', $w, $m)) return $m[1];              // sauces -> sauc(e), boxes -> box
+        if (preg_match('/(.*)s$/u',  $w, $m)) return $m[1];              // rings -> ring, buns -> bun
+        return $w;
+    }
+
     private function normalizeSize(?string $size): ?string
     {
         if (!$size) return null;
@@ -344,11 +545,16 @@ class OrderService
         $s = trim($s ?? '');
         $s = preg_replace('/\s+/u', ' ', $s) ?? $s;
 
+        Log::info('regex #1',[$s]);
+
         // strip trailing punctuation
         $s = preg_replace('/[.!?]+$/u', '', $s) ?? $s;
 
+        Log::info('regex #2',[$s]);
         // "and at ..." -> "add ..."
         $s = preg_replace('/^\s*(?:and\s+at)\b[,:-]?\s*/iu', 'add ', $s) ?? $s;
+
+        Log::info('regex #3',[$s]);
 
         // Map polite/variant verbs to "add ..."
         $s = preg_replace(
@@ -359,26 +565,51 @@ class OrderService
             $s
         ) ?? $s;
 
+        Log::info('regex #4',[$s]);
+
         // Remove filler words right after "add"
-        $s = preg_replace('/^\s*add\s+(?:(?:in|on|to|for|please|me|us|the)\s+)+/iu', 'add ', $s) ?? $s;
+        $s = preg_replace('/^\s*add\s+(?:(?:in|on|to|for|please|me|us|the|a|an)\s+)+/iu', 'add ', $s) ?? $s;
+
+        Log::info('regex #5',[$s]);
 
         // ASR quirk: "add to X" / "add too X" -> "add two X"
         $s = preg_replace('/^\s*add\s+(?:to|too)\b/iu', 'add two ', $s) ?? $s;
 
+        Log::info('regex #6',[$s]);
+
         // --------- BIG ONE: convert "number <word(s)>" -> "number <digits>" ----------
         // Handles "number two", "number thirty", "number thirty-one", "number thirties", etc.
+
+// Convert "number <number-words>" -> "number <digits>" without eating trailing "with/without ..."
         $s = preg_replace_callback(
-            '/\b(?:number|no\.|#)\s*([a-z][a-z \-]+)\b/iu',
+            '/\b(?:number|no\.|#)\s*' .
+            '(' .
+            '(?:zero|one|two|to|too|three|four|for|five|six|seven|eight|nine|ten|eleven|twelve|' .
+            'thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|' .
+            'twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|' .
+            'hundred|thousand)' .
+            '(?:[-\s]+' .
+            '(?:zero|one|two|to|too|three|four|for|five|six|seven|eight|nine|ten|eleven|twelve|' .
+            'thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|' .
+            'twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|' .
+            'hundred|thousand)' .
+            ')*' .
+            ')' .
+            '\b/iu',
             function ($m) {
-                $phrase = $this->normalizeNumberWord($m[1]);   // e.g., "thirties" -> "thirty"
-                $n = $this->wordsToNumber($phrase);            // e.g., "thirty" -> 30
+                $phrase = $this->normalizeNumberWord($m[1]);   // e.g., "thirty-one" -> "thirty one"
+                $n = $this->wordsToNumber($phrase);            // e.g., "thirty one" -> 31
                 return 'number ' . $n;
             },
             $s
         ) ?? $s;
 
+        Log::info('regex #7',[$s]);
+
         // Tidy cases like "number 16's" / "number 3s" -> "number 16" / "number 3"
         $s = preg_replace('/\b(?:number|no\.|#)\s*(\d+)\s*(?:\'s|’s|s|es)\b/iu', 'number $1', $s) ?? $s;
+
+        Log::info('regex #8',[$s]);
 
         return $s;
     }
@@ -503,10 +734,17 @@ class OrderService
         }
 
         // 4) Small-typo Levenshtein fallback (name-only)
+// 4) Small-typo Levenshtein fallback (respect size if provided)
         $bestId = null; $bestDist = PHP_INT_MAX;
         foreach ($menu as $idx => $m) {
+            if ($size !== null && !$this->sizeMatches($m['size'] ?? null, $size)) {
+                continue; // skip wrong sizes when user asked for one
+            }
             $d = levenshtein($spoken, $this->normName($m['name'] ?? ''));
-            if ($d < $bestDist) { $bestDist = $d; $bestId = (int)($m['id'] ?? $idx); }
+            if ($d < $bestDist) {
+                $bestDist = $d;
+                $bestId = (int)($m['id'] ?? $idx);
+            }
         }
         if ($bestId !== null && $bestDist <= 3) {
             return $this->addByMenuId($bestId, $qty, $add, $remove);
@@ -568,11 +806,16 @@ class OrderService
         $s = mb_strtolower(trim($s));
         $s = $this->stripDiacritics($s);
         $s = $this->lexify($s);
-        $s = str_replace('-', ' ', $s);                              // unify hyphens
-        $s = preg_replace('/[^\p{L}\p{N}& ]+/u', ' ', $s) ?? $s;     // drop punctuation except &
-        $s = preg_replace('/\s+/u', ' ', $s) ?? $s;                  // collapse spaces
-        return $s;
+        $s = str_replace('-', ' ', $s);                               // unify hyphens
+        $s = preg_replace('/[^\p{L}\p{N}& ]+/u', ' ', $s) ?? $s;      // drop punctuation except &
+        $s = preg_replace('/\s+/u', ' ', $s) ?? $s;                   // collapse spaces
+
+        // NEW: singularize tokens so "fries" ~ "fry", "rings" ~ "ring"
+        $tokens = array_filter(explode(' ', $s));
+        $tokens = array_map(fn($t) => $this->singularize($t), $tokens);
+        return implode(' ', $tokens);
     }
+
     private function decrementById(int $id, int $qty): bool
     {
         $items = $this->all();
