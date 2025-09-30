@@ -516,6 +516,36 @@ class OrderService
     }
 
 
+    private function menu(): array
+    {
+        // Prefer DB (items + toppings). Fallback to config if empty.
+        $items = \App\Models\Item::with('toppings')->get();
+        if ($items->isNotEmpty()) {
+            $out = [];
+            foreach ($items as $it) {
+                $out[$it->id] = [
+                    'id'       => (int)$it->id,
+                    'name'     => (string)$it->name,
+                    'type'     => (string)$it->type,
+                    'category' => $it->category ?: null,
+                    'size'     => $it->size ?: null,
+                    'price'    => (float)$it->price,
+                    'toppings' => $it->toppings->pluck('name')->all() ?: null,
+                ];
+            }
+            return $out;
+        }
+
+        // Fallback to config
+        $cfg = config('menu.items', []);
+        $out = [];
+        foreach ($cfg as $m) {
+            $out[(int)$m['id']] = $m + ['id' => (int)$m['id']];
+        }
+        return $out;
+    }
+
+
     private function pickBySize(array $candidates, ?string $want): array
     {
         // If user specified, pick that; else prefer Regular, then Large, else the first.
@@ -617,7 +647,7 @@ class OrderService
     }
 
     /** Load menu items keyed by id for fast lookup. Expects config/menu.php -> ['items'=>[...]] */
-    private function menu(): array
+    private function menuDB(): array
     {
         $items = config('menu.items', []);
         $out = [];
