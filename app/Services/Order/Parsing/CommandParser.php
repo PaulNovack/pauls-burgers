@@ -24,49 +24,45 @@ final class CommandParser
 
         if ($this->isClear($norm)) return 'clear';
 
-        // 3) ADD by id — must have "number|no.|#" before the id (digits or number-words)
+// 3) ADD by id
         if (preg_match(
-            '/^(?:add|and|also|plus|i\s+want|give\s+me|include)\s+' .
-            '(?:(?:at|in|on|to|for|please|me|us|the)\s+)*' .
-            '(?:(?<qty>\d+|one|two|to|too|three|four|for|five|six|seven|eight|nine|ten|eleven|twelve)\s*,?\s+)?' .
-            '(?:of\s+)?' .
-            '(?:a|an)?\s*(?:number|no\.|#)\s*' .                          // ← prefix is REQUIRED
-            '(?:(?<id>\d+)|(?<idw>(?:zero|one|two|to|too|three|four|for|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty)(?:[-\s]+(?:one|two|three|four|five|six|seven|eight|nine))?))' .
-            '(?:\'s|’s|s|es|ies)?' .                                       // #16s, number 12's
-            '\b' .
-            '(?:\s+(?<size>small|regular|large))?' .
-            '(?:.*?\bwith\b\s+(?<with>.*?))?' .
-            '(?:.*?\bwithout\b\s+(?<without>.*))?' .
-            '$/siu',
-            $norm,
-            $m
+            '/^(?:add|and|also|plus|i\s+want|give\s+me|include)\s+'
+            .'(?:(?:at|in|on|to|for|please|me|us|the)\s+)*'
+            .'(?:(?<qty>\d+|one|two|to|too|three|four|for|five|six|seven|eight|nine|ten|eleven|twelve)\s*,?\s+)?'
+            .'(?:of\s+)?'
+            .'(?:a|an)?\s*(?:number|no\.|#)\s*(?:of\s+)?'   // ← allow "number of"
+            .'(?:(?<id>\d+)\s*(?:\'s|’s|s)?|(?<idw>(?:zero|one|two|to|too|three|four|for|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty)(?:[-\s]+(?:one|two|three|four|five|six|seven|eight|nine))?)(?:\'s|’s|s|es|ies)?)\b'
+            .'(?:\s+(?<size>small|regular|large))?'
+            .'(?:.*?\bwith\b\s+(?<with>.*?))?'
+            .'(?:.*?\bwithout\b\s+(?<without>.*))?'
+            .'$/siu',
+            $norm, $m
         )) {
-            $qty  = $this->toQty($m['qty'] ?? '') ?: 1;
-            $id   = !empty($m['id']) ? (int)$m['id']
-                : $this->num->wordsToNumber($this->num->normalizeNumberWord($m['idw'] ?? ''));
+            $qty = $this->toQty($m['qty'] ?? '') ?: 1;
+            $id  = !empty($m['id']) ? (int)$m['id'] : $this->num->wordsToNumber($this->num->normalizeNumberWord($m['idw'] ?? ''));
             $adds = $this->mods->resolveList($this->splitList($m['with'] ?? ''));
             $rems = $this->mods->resolveList($this->splitList($m['without'] ?? ''));
-            return new AddById($id, $qty, $adds, $rems);
+            return new AddById($id,$qty,$adds,$rems);
         }
 
         // 4) ADD by name
         if (preg_match(
             '/^(?:add|and|also|plus|i\s+want|give\s+me|include)\s+'
-            . '(?:(?:at|in|on|to|for|please|me|us|the)\s+)*'
-            . '(?:(?<qty>\d+|one|two|to|too|three|four|for|five|six|seven|eight|nine|ten|eleven|twelve)\s+)?'
-            . '(?:(?<size>small|regular|large)\s+)?'
-            . '(?<name>.+?)(?=\s+(?:with|without)\b|$)'
-            . '(?:\s+\bwith\b\s+(?<with>.*?))?'
-            . '(?:\s+\bwithout\b\s+(?<without>.*))?'
-            . '$/siu',
+            .'(?:(?:at|in|on|to|for|please|me|us|the)\s+)*'
+            .'(?:(?<qty>\d+|one|two|to|too|three|four|for|five|six|seven|eight|nine|ten|eleven|twelve)\s+)?'
+            .'(?:(?<size>small|regular|large)\s+)?'
+            .'(?:(?:a|an|some|orders?\s+of|one\s+of\s+(?:them|those))\s+)*'  // ← ignore these
+            .'(?<name>.+?)(?=\s+(?:with|without)\b|$)'
+            .'(?:\s+\bwith\b\s+(?<with>.*?))?'
+            .'(?:\s+\bwithout\b\s+(?<without>.*))?'
+            .'$/siu',
             $norm, $m
         )) {
-            $qty = $this->toQty($m['qty'] ?? '') ?: 1;
+            $qty  = $this->toQty($m['qty'] ?? '') ?: 1;
             $size = $this->N->normalizeSize($m['size'] ?? null);
             $name = trim($m['name'] ?? '');
             $adds = $this->mods->resolveList($this->splitList($m['with'] ?? ''));
             $rems = $this->mods->resolveList($this->splitList($m['without'] ?? ''));
-            $this->safeLog('Process Command #4 Match', compact('name','size','qty','adds','rems'));
             return new AddByName($name,$qty,$adds,$rems,$size);
         }
 
@@ -133,7 +129,11 @@ final class CommandParser
     {
         if(!$s) return 0; $s=mb_strtolower(trim($s));
         if(ctype_digit($s)) return max(1,(int)$s);
-        return ['one'=>1,'two'=>2,'to'=>2,'too'=>2,'three'=>3,'four'=>4,'for'=>4,'five'=>5,'six'=>6,'seven'=>7,'eight'=>8,'nine'=>9,'ten'=>10,'eleven'=>11,'twelve'=>12][$s] ?? 0;
+        return [
+            'one'=>1,'two'=>2,'to'=>2,'too'=>2,'three'=>3,'four'=>4,'for'=>4,'five'=>5,
+            'six'=>6,'seven'=>7,'eight'=>8,'nine'=>9,'ten'=>10,'eleven'=>11,'twelve'=>12,
+            'couple'=>2,
+        ][$s] ?? 0;
     }
 
     private function splitList(string $s): array

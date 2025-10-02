@@ -2,52 +2,40 @@
 namespace App\Services\Order\Impl;
 
 use App\Services\Order\Contracts\ModifierResolver;
+use App\Services\Order\Contracts\ToppingPolicyRepository;
 
 final class DefaultModifierResolver implements ModifierResolver
 {
-    /** Canonical synonyms (category-agnostic canonicalization) */
+    /** optional policy (config/db) */
+    public function __construct(private ?ToppingPolicyRepository $policy = null) {}
+
+    /** Map of synonyms → canonical names (trimmed for brevity; extend as needed) */
     private array $synonyms = [
-        // cheeses
         'Cheddar Cheese'  => ['cheddar','cheddar cheese','extra cheddar'],
         'Swiss Cheese'    => ['swiss','swiss cheese'],
         'American Cheese' => ['american','american cheese'],
         'Pepper Jack'     => ['pepper jack','pepperjack'],
         'Blue Cheese'     => ['blue cheese','bleu cheese','bleu'],
-        // common toppings
         'Bacon'           => ['bacon','crispy bacon'],
         'Onion'           => ['onion','onions','grilled onion','grilled onions'],
+
+        // ⬇️ NEW: make “rings” a canonical mod and include “rinds” as a variant
+        'Onion Rings'     => [
+            'onion rings','onion ring','onion rngs','onion rng',
+            'onion rinds','onion rind','onin rings','onin rinds'
+        ],
         'Pickle'          => ['pickle','pickles'],
         'Tomato'          => ['tomato','tomatoes'],
         'Lettuce'         => ['lettuce'],
         'Jalapeno'        => ['jalapeno','jalapenos','jalapeño','jalapeños'],
-        // sauces
         'Ketchup'         => ['ketchup'],
         'Mustard'         => ['mustard','yellow mustard'],
         'Mayo'            => ['mayo','mayonnaise'],
         'BBQ Sauce'       => ['bbq','bbq sauce','barbecue','barbeque'],
-        // drinks
-        'Ice'             => ['ice'],
+        'Ice'             => ['ice','with ice','no ice','without ice'], // canonical stays 'Ice'
     ];
 
-    /** Allowed sets by category/type */
-    private array $allowedByCategory = [
-        'burger' => [
-            'Cheddar Cheese','Swiss Cheese','American Cheese','Pepper Jack','Blue Cheese',
-            'Bacon','Onion','Pickle','Tomato','Lettuce','Jalapeno',
-            'Ketchup','Mustard','Mayo','BBQ Sauce',
-            // (no Ice on burgers)
-        ],
-        'side' => [
-            // typical side dips/condiments; adjust to taste
-            'Ketchup','Mustard','Mayo','BBQ Sauce',
-            // If you allow cheese on sides, uncomment:
-            // 'Cheddar Cheese','Blue Cheese',
-        ],
-        'drink' => [
-            'Ice', // drinks allow only Ice (so "without ice" works)
-        ],
-    ];
-
+    /** Canonicalize + dedupe */
     public function resolveList(array $raw): array
     {
         $out=[]; $seen=[];
@@ -56,41 +44,40 @@ final class DefaultModifierResolver implements ModifierResolver
             if ($can==='') continue;
             $k = mb_strtolower($can);
             if (isset($seen[$k])) continue;
-            $seen[$k]=true;
-            $out[]=$this->title($can);
+            $seen[$k]=true; $out[]=$this->title($can);
         }
         return $out;
     }
 
-    public function filterByCategory(string $categoryOrType, array $mods): array
+    /** ✅ The method your tests call (array first, category second) */
+    public function filterByCategory(array $mods, ?string $category): array
     {
-        $key = $this->keyForCategory($categoryOrType);
-        $allowed = $this->allowedByCategory[$key] ?? null;
+        if (empty($mods)) return [];
+        $cat = $this->normalizeCategory($category);
 
-        // If we don't know the category, default to legacy behavior (keep all).
-        if ($allowed === null) return $mods;
-
-        $allowedSet = [];
-        foreach ($allowed as $a) { $allowedSet[mb_strtolower($a)] = true; }
-
-        $out=[];
-        foreach ($mods as $m) {
-            if (isset($allowedSet[mb_strtolower($m)])) $out[] = $m;
+        // ✅ If category is unknown, do NOT filter — just canonicalize.
+        if ($cat === null) {
+            return $this->resolveList($mods);
         }
-        return $out;
+
+        $allowed = $this->policy?->allowedFor($cat) ?? $this->defaultsFor($cat);
+
+        // If we somehow don’t have an allow-list, also skip filtering.
+        if ($allowed === null) {
+            return $this->resolveList($mods);
+        }
+
+        $allowedMap = [];
+        foreach ($allowed as $a) $allowedMap[mb_strtolower($a)] = true;
+
+        $resolved = $this->resolveList($mods);
+        return array_values(array_filter(
+            $resolved,
+            fn($m) => isset($allowedMap[mb_strtolower($m)])
+        ));
     }
 
-    private function keyForCategory(string $c): string
-    {
-        $x = mb_strtolower(trim($c));
-        // normalize some common values from your menu data
-        return match ($x) {
-            'burger','burgers','sandwich','sandwiches' => 'burger',
-            'side','sides','app','apps','appetizer','appetizers' => 'side',
-            'drink','drinks','beverage','beverages','soda','coke' => 'drink',
-            default => $x, // unknown keys will bypass filtering
-        };
-    }
+    // ---------- helpers ----------
 
     private function canonicalize(string $s): string
     {
@@ -101,26 +88,48 @@ final class DefaultModifierResolver implements ModifierResolver
         // exact canonical
         foreach (array_keys($this->synonyms) as $canon) if ($title === $canon) return $canon;
 
-        // exact synonym
-        foreach ($this->synonyms as $canon=>$variants) {
+        // synonym hits
+        foreach ($this->synonyms as $canon => $variants) {
             foreach ($variants as $v) if ($raw === mb_strtolower($v)) return $canon;
         }
 
-        // light fuzzy (small typos)
+        // light fuzzy (distance<=2)
         $best=''; $bestDist=3;
-        foreach ($this->synonyms as $canon=>$variants) {
+        foreach ($this->synonyms as $canon => $variants) {
             foreach ($variants as $v) {
-                $d=levenshtein($raw, mb_strtolower($v));
-                if ($d < $bestDist) { $bestDist=$d; $best=$canon; }
+                $d = levenshtein($raw, mb_strtolower($v));
+                if ($d < $bestDist) { $bestDist = $d; $best = $canon; }
             }
-            $d2=levenshtein($raw, mb_strtolower($canon));
-            if ($d2 < $bestDist) { $bestDist=$d2; $best=$canon; }
+            $d2 = levenshtein($raw, mb_strtolower($canon));
+            if ($d2 < $bestDist) { $bestDist = $d2; $best = $canon; }
         }
         return $best !== '' ? $best : $title;
     }
 
-    private function title(string $s): string
+    private function normalizeCategory(?string $c): ?string
     {
-        return mb_convert_case(trim($s), MB_CASE_TITLE, 'UTF-8');
+        $x = mb_strtolower(trim((string)$c));
+        return match ($x) {
+            'burger','burgers','sandwich' => 'burger',
+            'side','sides','app','apps','appetizer','appetizers' => 'side',
+            'drink','drinks','beverage','beverages' => 'drink',
+            default => null,   // ✅ don’t guess; unknown => no filtering
+        };
     }
+
+    private function defaultsFor(string $cat): ?array
+    {
+        return match ($cat) {
+            'burger' => [
+                'Cheddar Cheese','Swiss Cheese','American Cheese','Pepper Jack','Blue Cheese',
+                'Bacon','Onion','Pickle','Tomato','Lettuce','Jalapeno','Ketchup','Mustard','Mayo','BBQ Sauce'
+            ],
+            'side'   => ['Ketchup','BBQ Sauce','Mayo','Ranch','Cheese Sauce','Jalapeno'],
+            'drink'  => ['Ice'],
+            default  => null,
+        };
+    }
+
+    private function title(string $s): string
+    { return mb_convert_case(trim($s), MB_CASE_TITLE, 'UTF-8'); }
 }

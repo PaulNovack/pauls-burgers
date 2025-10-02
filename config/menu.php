@@ -8,31 +8,38 @@ return [
 
     // Known toppings allow-list (for parsing "with/without ..." from ASR)
     'toppings' => [
-        "2 Beef Patties",
-        "American Cheese",
-        "Avocado",
-        "Bacon",
-        "BBQ Sauce",
-        "Beef Patty",
-        "Blue Cheese Crumbles",
-        "Caramelized Onions",
-        "Cheddar Cheese",
-        "Chipotle Mayo",
-        "Grilled Mushrooms",
-        "Jalapeños",
-        "Ketchup",
-        "Lettuce",
-        "Mustard",
-        "Onion",
-        "Onion Rings",
-        "Pepper Jack Cheese",
-        "Pickles",
-        "Quarter Pound Beef Patty",
-        "Swiss Cheese",
-        "Tomato",
-        "Veggie Patty",
-        "Ranch Dressing",
-        "Thousand Island Dressing",
+        // Canonical names per category
+        'burger' => [
+            'Cheddar Cheese','Swiss Cheese','American Cheese','Pepper Jack','Blue Cheese',
+            'Bacon','Onion','Pickle','Tomato','Lettuce','Jalapeno',
+            'Ketchup','Mustard','Mayo','BBQ Sauce','Thousand Island Dressing','Ranch Dressing',
+        ],
+        'side' => [
+            'Ketchup','Mustard','Mayo','BBQ Sauce','Thousand Island Dressing','Ranch Dressing',
+        ],
+        'drink' => [
+            'Ice', // drinks: only Ice (so “no ice” works)
+        ],
+
+        // Optional: synonyms live in config too (merged with DB if present)
+        'synonyms' => [
+            'Cheddar Cheese'  => ['cheddar','cheddar cheese','extra cheddar'],
+            'Swiss Cheese'    => ['swiss','swiss cheese'],
+            'American Cheese' => ['american','american cheese'],
+            'Pepper Jack'     => ['pepper jack','pepperjack'],
+            'Blue Cheese'     => ['blue cheese','bleu cheese','bleu'],
+            'Bacon'           => ['bacon','crispy bacon'],
+            'Onion'           => ['onion','onions','grilled onion','grilled onions'],
+            'Pickle'          => ['pickle','pickles'],
+            'Tomato'          => ['tomato','tomatoes'],
+            'Lettuce'         => ['lettuce'],
+            'Jalapeno'        => ['jalapeno','jalapenos','jalapeño','jalapeños'],
+            'Ketchup'         => ['ketchup'],
+            'Mustard'         => ['mustard','yellow mustard'],
+            'Mayo'            => ['mayo','mayonnaise'],
+            'BBQ Sauce'       => ['bbq','bbq sauce','barbecue','barbeque'],
+            'Ice'             => ['ice'],
+        ],
     ],
 
     // Catalog keyed by numeric ID for quick lookup
@@ -117,8 +124,8 @@ return [
         // ---------------- Drinks (37–52) ----------------
         37 => ['id' => 37, 'name' => 'Chocolate Milkshake', 'type' => 'drink', 'category' => 'drink', 'size' => 'Regular', 'price' => 3.49, 'toppings' => null],
         38 => ['id' => 38, 'name' => 'Chocolate Milkshake', 'type' => 'drink', 'category' => 'drink', 'size' => 'Large',   'price' => 4.49, 'toppings' => null],
-        39 => ['id' => 39, 'name' => 'Coca-Cola',           'type' => 'drink', 'category' => 'drink', 'size' => 'Regular', 'price' => 1.99, 'toppings' => null],
-        40 => ['id' => 40, 'name' => 'Coca-Cola',           'type' => 'drink', 'category' => 'drink', 'size' => 'Large',   'price' => 2.49, 'toppings' => null],
+        39 => ['id' => 39, 'name' => 'Coke',                'type' => 'drink', 'category' => 'drink', 'size' => 'Regular', 'price' => 1.99, 'toppings' => null],
+        40 => ['id' => 40, 'name' => 'Coke',                'type' => 'drink', 'category' => 'drink', 'size' => 'Large',   'price' => 2.49, 'toppings' => null],
         41 => ['id' => 41, 'name' => 'Diet Coke',           'type' => 'drink', 'category' => 'drink', 'size' => 'Regular', 'price' => 1.99, 'toppings' => null],
         42 => ['id' => 42, 'name' => 'Diet Coke',           'type' => 'drink', 'category' => 'drink', 'size' => 'Large',   'price' => 2.49, 'toppings' => null],
         43 => ['id' => 43, 'name' => 'Iced Tea',            'type' => 'drink', 'category' => 'drink', 'size' => 'Regular', 'price' => 1.79, 'toppings' => null],

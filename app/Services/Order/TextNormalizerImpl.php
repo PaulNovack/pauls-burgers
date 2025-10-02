@@ -10,116 +10,63 @@ final class TextNormalizerImpl implements TextNormalizer
     {
         $s = trim($s ?? '');
         $s = preg_replace('/\s+/u', ' ', $s) ?? $s;
-        $this->safeLog('regex #1', [$s]);
-
-        // strip trailing punctuation
         $s = preg_replace('/[.!?]+$/u', '', $s) ?? $s;
-        $this->safeLog('regex #2', [$s]);
 
-        // Fix "and at ..." quirk -> "add ..."
-        $s = preg_replace('/^\s*(?:and\s+at)\b[,:-]?\s*/iu', 'add ', $s) ?? $s;
-        $this->safeLog('regex #3', [$s]);
+        // --- remove conversational lead-ins (don’t inject "add" here to avoid "add add" duplicates)
+        $s = preg_replace('/^\s*(?:yeah|yep|ok|okay|well|you\s*know|then|also|plus|and|just)\b[,:-]?\s*/iu', '', $s) ?? $s;
 
-        // Drop preambles at the very start (greetings/softeners/y'all/could you/etc.)
-        $s = preg_replace(
-            '/^\s*(?:'
-            .'hey|hi|hello|please|ok|okay|alright|anyway|so|well|you\s+know'
-            .'|(?:could|would|can|will)\s+you'
-            .'|(?:could|would|can|will)\s+y[\'’]?all'
-            .'|y[\'’]?all(?:\s+(?:think(?:ing)?\s+)?you\s+could)?'
-            .')\b[,:-]?\s*/iu',
-            '',
-            $s
-        ) ?? $s;
+        // --- map request forms to "add "
+        $s = preg_replace('/^\s*(?:i\s+want|i\'?d\s+like|i\s+would\s+like|i\'?ll\s+have|have\s+me|had\s+(?:a|an)|give\s+me|gimme|include|i\s+need|i\s+decided\s+i\s+want)\b[,:-]?\s*/iu','add ',$s) ?? $s;
 
-        // Map variant starts to "add ..." (incl. ASR 'had'/'I had')
-        $s = preg_replace(
-            '/^\s*(?:'
-            .'and|also|plus|yeah|yep|uh|um|then|at|just'
-            .'|i\s+want|i\'?d\s+like|i\s+would\s+like|i\'?ll\s+have|i\s+need'
-            .'|i\s+decided\s+i\s+want'
-            .'|give\s+me|gimme|include'
-            .'|have(?:\s+(?:me|us|a|an|some))?'
-            .'|(?:could|can|may)\s+i\s+(?:have|get)'
-            .'|had|i\s+had'
-            .')\b[,:-]?\s*/iu',
-            'add ',
-            $s
-        ) ?? $s;
-        $this->safeLog('regex #4', [$s]);
+        // "could|can|may|would you|y'all … give/get/add/bring me …"
+        $s = preg_replace('/^\s*(?:can|could|may|would)\s+(?:you|ya?l{1,2}|y[\'’]?all)\s+(?:please\s+)?(?:give|get|add|bring)\s+me\b[,:-]?\s*/iu','add ',$s) ?? $s;
 
-        // --- Apply qty/phrase mappers BEFORE stripping fillers ---
+        // "y'all thinking/think you could add me …"
+        $s = preg_replace('/^\s*(?:ya?l{1,2}|y[\'’]?all)\s+(?:think(?:ing)?\s+you\s+could)\s+add\s+me\b[,:-]?\s*/iu','add ',$s) ?? $s;
 
-        // "a/one couple of" => "two"
-        $s = preg_replace('/\b(?:a|one)?\s*couple\s+of\b/iu', 'two ', $s) ?? $s;
+        // rare: people start with "at ..." (ASR), make it "add ..."
+        $s = preg_replace('/^\s*at\b[,:-]?\s*/iu','add ',$s) ?? $s;
 
-        // Allow "orders of ..." phrasing
-        $s = preg_replace('/\borders?\s+of\b/iu', '', $s) ?? $s;
+        // --- unify "with no X" / leading "no X" → "without X"
+        $s = preg_replace('/\bwith\s+no\s+/iu','without ',$s) ?? $s;
+        $s = preg_replace('/\bno\s+(?=[a-z])/iu','without ',$s) ?? $s;
 
-        // Collapse "of them/the/these/those"
-        $s = preg_replace('/\bof\s+(?:the|them|those|these)\b/iu', '', $s) ?? $s;
+        // --- quantity idioms
+        // "a couple of ..." → "two ..."
+        $s = preg_replace('/\b(?:a\s+)?couple\s+of\b/iu','two ',$s) ?? $s;
 
-        // Treat "lettuce wrap <name>" as just "<name>"
-        $s = preg_replace('/\blettuce\s+wrap\s+/iu', '', $s) ?? $s;
+        // --- after "add ", strip early fillers repeatedly
+        // e.g., add [please|me|us|the|a|an|some|like] ...
+        $s = preg_replace('/^\s*add\s+(?:(?:in|on|to|for|please|me|us|the|a|an|some|like)\s+)+/iu','add ',$s) ?? $s;
+        // e.g., add orders of ..., add a/one of (them|those) ...
+        $s = preg_replace('/^\s*add\s+(?:orders?\s+of\s+)+/iu','add ',$s) ?? $s;
+        $s = preg_replace('/^\s*add\s+(?:one\s+of\s+(?:them|those)\s+)+/iu','add ',$s) ?? $s;
 
-        // --------------------------------------------------------
-
-        // Remove filler words right after "add"
-        // (NOTE: do NOT include "a couple of|couple of" here or you’ll erase the qty)
-        $s = preg_replace(
-            '/^\s*add\s+(?:(?:'
-            .'add|and|' // remove duplicate "add" and a leading "and"
-            .'in|on|to|for|please|me|us|the|a|an|have|just|like|kinda|kind\s+of|sort\s+of|'
-            .'some|some\s+of|a\s+few|few'
-            .')\s+)+/iu',
-            'add ',
-            $s
-        ) ?? $s;
-        $this->safeLog('regex #5', [$s]);
-
-        // "with no <modifier>" → "without <modifier>" (prevents "with without ...")
-        $s = preg_replace('/\bwith\s+no\s+/iu', 'without ', $s) ?? $s;
-
-        // Standalone "no <modifier>" → "without <modifier>", but NOT after "with", and not "no. 7"
-        $s = preg_replace('/(?<!\bwith\s)\bno(?!\.)\s+/iu', 'without ', $s) ?? $s;
-
-        // ASR quirk: "add to/too" -> "add two"
-        $s = preg_replace('/^\s*add\s+(?:to|too)\b/iu', 'add two ', $s) ?? $s;
-        $this->safeLog('regex #6', [$s]);
-
-        // Convert "number <number-words>" -> "number <digits>"
+        // --- number <words> → number <digits>
         $s = preg_replace_callback(
             '/\b(?:number|no\.|#)\s*('
-            .'(?:zero|one|two|to|too|three|four|for|five|six|seven|eight|nine|ten|eleven|twelve|'
-            .'thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|'
-            .'twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|'
-            .'hundred|thousand)'
-            .'(?:[-\s]+'
-            .'(?:zero|one|two|to|too|three|four|for|five|six|seven|eight|nine|ten|eleven|twelve|'
-            .'thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|'
-            .'twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|'
-            .'hundred|thousand)'
-            .')*'
+            .'(?:zero|one|two|to|too|three|four|for|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|hundred|thousand)'
+            .'(?:[-\s]+(?:zero|one|two|to|too|three|four|for|five|six|seven|eight|nine))?'
             .')\b/iu',
             function ($m) {
                 $phrase = $this->normalizeNumberWord($m[1]);
                 $n = $this->wordsToNumber($phrase);
-                return 'number ' . $n;
+                return 'number '.$n;
             },
             $s
         ) ?? $s;
-        $this->safeLog('regex #7', [$s]);
 
-        // Tidy "number 16's" / "number 3s" -> "number 16" / "number 3"
-        $s = preg_replace('/\b(?:number|no\.|#)\s*(\d+)\s*(?:\'s|’s|s|es)\b/iu', 'number $1', $s) ?? $s;
-        $this->safeLog('regex #8', [$s]);
+        // normalize "number 5s/fives" → "number 5"
+        $s = preg_replace('/\b(?:number|no\.|#)\s*(\d+)\s*(?:\'s|’s|s|es)\b/iu','number $1',$s) ?? $s;
 
-        // Strip trailing hedges like ", I think" / "I guess" / "maybe"
-        $s = preg_replace('/\s*,?\s*(?:i\s+think|i\s+guess|i\s+suppose|maybe)\s*$/iu', '', $s) ?? $s;
+        // strip trailing ", I think"
+        $s = preg_replace('/,\s*i\s*think\s*$/iu','',$s) ?? $s;
 
-        // IMPORTANT: keep lexify out of normalizeCommand; we do it in normName() for matching.
+        // lexify (keep surface forms the tests expect)
+        $s = $this->lexify($s);
         return $s;
     }
+
 
 
     public function normalizeSize(?string $size): ?string
@@ -166,29 +113,19 @@ final class TextNormalizerImpl implements TextNormalizer
 
     private function lexify(string $s): string
     {
-        // BBQ variants
-        $s = preg_replace('/\bbarbe?cue\b/iu', 'bbq', $s) ?? $s;
-        $s = preg_replace('/\bbar[-\s]*b[-\s]*q\b/iu', 'bbq', $s) ?? $s;
-        $s = preg_replace('/\bb\.?\s*b\.?\s*q\.?\b/iu', 'bbq', $s) ?? $s;
-
-        // Milkshake
-        $s = preg_replace('/\bmilk[-\s]*shake\b/iu', 'milkshake', $s) ?? $s;
-
-        // Mac & Cheese
+        $s = preg_replace('/\bbarbe?cue\b/iu','bbq',$s) ?? $s;
+        $s = preg_replace('/\bbar[-\s]*b[-\s]*q\b/iu','bbq',$s) ?? $s;
+        $s = preg_replace('/\bb\.?\s*b\.?\s*q\.?\b/iu','bbq',$s) ?? $s;
+        $s = preg_replace('/\bmilk[-\s]*shake\b/iu','milkshake',$s) ?? $s;
+        $s = preg_replace('/\bjalapen(?:o|os)\b/iu','jalapeno',$s) ?? $s;
         $s = preg_replace('/\bmac\s*(?:and|&|n[\'’]?)\s*cheese\b/iu', 'mac & cheese', $s) ?? $s;
-
-        // Jalapeño normalize
-        $s = preg_replace('/\bjalapen(?:o|os)\b/iu', 'jalapeno', $s) ?? $s;
-
-        // Coke → Coca-Cola (only at match-time, not in raw command)
-        $s = preg_replace('/\bcoke\b/iu', 'coca cola', $s) ?? $s;
-
-        // Cheeseburger → "cheese burger" to help "blue cheese burger" vs "cheeseburger"
-        $s = preg_replace('/\bcheeseburgers\b/iu', 'cheese burgers', $s) ?? $s;
-        $s = preg_replace('/\bcheeseburger\b/iu', 'cheese burger', $s) ?? $s;
-
+        // keep “coke” as-is
+        $s = preg_replace('/\bcheeseburgers\b/iu','cheese burgers',$s) ?? $s;
+        $s = preg_replace('/\bcheeseburger\b/iu','cheese burger',$s) ?? $s;
         return $s;
     }
+
+
 
     // --- number-word helpers (reuse logic without DI) ---
 

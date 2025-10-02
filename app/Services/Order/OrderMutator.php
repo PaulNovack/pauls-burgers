@@ -70,10 +70,14 @@ final class OrderMutator
         $menuItem = $menu[$id] ?? null;
         if (!$menuItem) return false;
 
-        $categoryOrType = $menuItem['type'] ?? ($menuItem['category'] ?? '');
-        // Filter modifiers by category/type
-        $add    = $this->mods->filterByCategory((string)$categoryOrType, $add);
-        $remove = $this->mods->filterByCategory((string)$categoryOrType, $remove);
+        // Canonicalize first
+        $add    = $this->mods->resolveList($add);
+        $remove = $this->mods->resolveList($remove);
+
+        // Then (optionally) category-filter what the user asked to add/remove
+        $category = $menuItem['category'] ?? ($menuItem['type'] ?? null);
+        $add    = $this->mods->filterByCategory($add,    $category);
+        $remove = $this->mods->filterByCategory($remove, $category);
 
         $items = $this->repo->all();
         $key = $this->lineKey($id, $menuItem['size'] ?? null, $add, $remove);
@@ -82,13 +86,14 @@ final class OrderMutator
             $items[$key] = $this->makeLine($menuItem, $qty, $add, $remove);
         } else {
             $items[$key]['quantity'] = max(1, (int)$items[$key]['quantity'] + max(1, $qty));
-            // de-dup adds/removes
             $items[$key]['add']    = $this->uniqueList(array_merge($items[$key]['add'] ?? [], $add));
             $items[$key]['remove'] = $this->uniqueList(array_merge($items[$key]['remove'] ?? [], $remove));
         }
+
         $this->repo->putAll($items);
         return true;
     }
+
 
     private function addByName(string $spokenName, int $qty, array $add, array $remove, ?string $size = null): bool
     {
@@ -98,64 +103,67 @@ final class OrderMutator
     }
 
     /** Decrement by id, optionally filtering by size/add/remove. Returns true if anything changed. */
-    private function decrementByIdWithMods(int $id, int $qty, ?string $size, array $needAdd, array $needRemove): bool
+    private function decrementByIdWithMods(int $id, int $qty, ?string $size, array|string $needAdd, array|string $needRemove): bool
     {
+        // ✅ Coerce to arrays & canonicalize once
+        $needAdd    = is_array($needAdd)    ? $needAdd    : [$needAdd];
+        $needRemove = is_array($needRemove) ? $needRemove : [$needRemove];
+
+        // Canonicalize the lists so matching is stable (e.g., “bacon” → “Bacon”)
+        $needAdd    = $this->mods->resolveList($needAdd);
+        $needRemove = $this->mods->resolveList($needRemove);
+
+        // (Optional) If you previously filtered these by category, drop that —
+        // these are NOT modifiers we’re applying, they’re just filters for selecting a line.
+        // If you insist on filtering, it’s safe now because they’re arrays:
+        //
+        // $menuItem  = $this->menu->menu()[$id] ?? null;
+        // $category  = $menuItem['category'] ?? ($menuItem['type'] ?? null);
+        // $needAdd   = $this->mods->filterByCategory($needAdd, $category);
+        // $needRemove= $this->mods->filterByCategory($needRemove, $category);
+
         $items = $this->repo->all();
         if (empty($items) || $qty <= 0) return false;
 
-        // Determine category/type for this menu id (used to filter allowed modifiers)
-        $menu = $this->menu->menu();
-        $menuItem = $menu[$id] ?? null;
-        $categoryOrType = $menuItem['type'] ?? ($menuItem['category'] ?? '');
-
-        // Canonicalize + category-filter the requested modifier constraints
-        $needAdd    = $this->mods->filterByCategory((string)$categoryOrType, $this->mods->resolveList($needAdd));
-        $needRemove = $this->mods->filterByCategory((string)$categoryOrType, $this->mods->resolveList($needRemove));
-
-        // Collect candidate line indexes that match id/size and contain the requested mods
+        // Find candidate lines matching id/size and containing the needed mods
         $candidates = [];
         foreach ($items as $k => $line) {
             if ((int)($line['id'] ?? 0) !== $id) continue;
-
-            // size match (if requested)
             if ($size !== null && $this->N->normalizeSize($line['size'] ?? null) !== $size) continue;
 
-            // requested modifiers must be subsets of the line's modifiers
-            if ($needAdd && !$this->listIsSubset($needAdd, $line['add'] ?? [])) continue;
+            // Match against line’s add/remove (these are already arrays on stored lines)
+            if ($needAdd && !$this->listIsSubset($needAdd,    $line['add']    ?? [])) continue;
             if ($needRemove && !$this->listIsSubset($needRemove, $line['remove'] ?? [])) continue;
 
             $candidates[] = $k;
         }
         if (!$candidates) return false;
 
-        // Prefer more-specific matches (more modifiers) first
+        // Remove from the "most specific" lines first (more modifiers)
         usort($candidates, function ($a, $b) use ($items) {
             $sa = count($items[$a]['add'] ?? []) + count($items[$a]['remove'] ?? []);
             $sb = count($items[$b]['add'] ?? []) + count($items[$b]['remove'] ?? []);
             return $sb <=> $sa;
         });
 
-        // Decrement across candidates until qty is satisfied
         $remaining = max(1, $qty);
         foreach ($candidates as $k) {
             $cur  = max(1, (int)($items[$k]['quantity'] ?? 1));
             $take = min($cur, $remaining);
             $new  = $cur - $take;
 
-            if ($new <= 0) {
-                unset($items[$k]);
-            } else {
-                $items[$k]['quantity'] = $new;
-            }
+            if ($new <= 0) unset($items[$k]);
+            else $items[$k]['quantity'] = $new;
 
             $remaining -= $take;
             if ($remaining <= 0) break;
         }
 
-        // Reindex and persist
+        // Reindex keys for consistency
         $this->repo->putAll(array_values($items));
         return true;
     }
+
 
     /** Case-insensitive, plural/possessive tolerant subset check. */
     private function listIsSubset(array $needles, array $haystack): bool
@@ -217,5 +225,13 @@ final class OrderMutator
         sort($add, SORT_NATURAL | SORT_FLAG_CASE);
         sort($remove, SORT_NATURAL | SORT_FLAG_CASE);
         return $id . '|' . ($size ?? 'none') . '|' . implode(',', $add) . '|' . implode(',', $remove);
+    }
+
+    // NEW helper – guarantees arrays & canonicalizes + filters by category
+    private function sanitizeModsForCategory(array|string|null $mods, ?string $category): array
+    {
+        $arr = is_array($mods) ? $mods : (isset($mods) ? [$mods] : []);
+        $resolved = $this->mods->resolveList($arr);              // canonical, unique
+        return $this->mods->filterByCategory($resolved, $category); // keep only allowed for category
     }
 }

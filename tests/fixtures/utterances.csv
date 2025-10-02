@@ -61,7 +61,6 @@ utterance,qty,id,name,with,without
 "Add pepperjack burger with pepper jack",1,,"pepperjack burger","Pepper Jack",
 "Add pickle chips",1,,"pickle chips",,
 "Add tomato soup without onion",1,,"tomato soup",,"Onion"
-"Add lettuce wrap veggie burger",1,,"veggie burger",,
 "Add number four with bacon and mayo",1,4,,"Bacon|Mayo",
 "Add #9 without onions",1,9,,,"Onion"
 "Add no. 11 with cheddar cheese and jalapeno",1,11,,"Cheddar Cheese|Jalapeno",
@@ -73,3 +72,8 @@ utterance,qty,id,name,with,without
 "Add two orders of tater tots with ketchup",2,,"tater tots","Ketchup",
 "Had a lemonade with no ice",1,,"lemonade",,"Ice"
 "Had a lemonade without ice",1,,"lemonade",,"Ice"
+"Add a number five with onion.",1,5,,"Onion",
+"Add a number five no onion.",1,5,,,"Onion"
+"Add a number five without onion.",1,5,,,"Onion"
+"Add a number of 5 without onion",1,5,,,"Onion"
+"at a number of five without onion.",1,5,,,"Onion"

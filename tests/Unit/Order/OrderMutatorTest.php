@@ -38,11 +38,11 @@ final class OrderMutatorTest extends TestCase
     public function test_add_by_name_with_size_and_mods(): void
     {
         $m = $this->mutator();
-        $r = $m->apply(new AddByName('lemonade', 1, ['Bacon'], [], 'Large'));
+        $r = $m->apply(new AddByName('lemonade', 1, ['No Ice'], [], 'Large'));
         $this->assertSame('add', $r['action']);
         $this->assertCount(1, $r['items']);
         $this->assertSame(46, $r['items'][0]['id']); // Large lemonade id=4
-        $this->assertContains('Bacon', $r['items'][0]['add']);
+        $this->assertContains('Ice', $r['items'][0]['add']);
     }
 
 
