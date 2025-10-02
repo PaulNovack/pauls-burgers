@@ -28,7 +28,7 @@
                             <div class="text-sm text-right">({{ line.quantity }})</div>
 
                             <div class="text-sm text-left leading-tight">
-                                {{ line.name }}
+                                #{{line.id}} {{ line.name }}
                                 <span v-if="line.size">({{ line.size }})</span>
 
                                 <!-- Add / Without line -->
