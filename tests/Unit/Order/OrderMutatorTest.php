@@ -4,7 +4,7 @@
 namespace Tests\Unit\Order;
 
 
-use PHPUnit\Framework\TestCase;
+use Tests\TestCase;
 use Tests\Support\{InMemoryOrderRepository, FakeMenuRepository};
 use App\Services\Order\{OrderMutator, TextNormalizerImpl};
 use App\Services\Order\Impl\DefaultModifierResolver;

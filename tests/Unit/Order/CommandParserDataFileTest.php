@@ -2,7 +2,7 @@
 
 namespace Tests\Unit\Order;
 
-use PHPUnit\Framework\TestCase;
+use Tests\TestCase;
 use App\Services\Order\TextNormalizerImpl;
 use App\Services\Order\Impl\DefaultModifierResolver;
 use App\Services\Order\Parsing\{CommandParser, NumberWordConverter, NameMatcher};

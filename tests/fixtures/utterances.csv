@@ -33,7 +33,7 @@ utterance,qty,id,name,with,without
 "Add two onion rings without ketchup",2,,"onion rings",,"Ketchup"
 "Add pepper jack burger with pepperjack and jalapeno",1,,"pepper jack burger","Pepper Jack|Jalapeno",
 "Add bbq burger with bbq",1,,"bbq burger","BBQ Sauce",
-"Add coca cola",1,,"coca cola",,
+"Add coke",1,,"coke",,
 "Add mac and cheese bites",1,,"mac and cheese bites",,
 "Add large fries with ketchup and mayo",1,,"fries","Ketchup|Mayo",
 "Add small lemonade without ice",1,,"lemonade",,"Ice"
@@ -47,7 +47,7 @@ utterance,qty,id,name,with,without
 "Add some tater tots",1,,"tater tots",,
 "Add orders of curly fries with ketchup",1,,"curly fries","Ketchup",
 "Add large diet coke",1,,"diet coke",,
-"Add regular coca cola",1,,"coca cola",,
+"Add regular coke",1,,"coke",,
 "Add veggie burger with jalapeno, tomato and lettuce",1,,"veggie burger","Jalapeno|Tomato|Lettuce",
 "Add cheese burger with american cheese",1,,"cheese burger","American Cheese",
 "Add cheese burger without tomato, pickles and onion",1,,"cheese burger",,"Tomato|Pickle|Onion"

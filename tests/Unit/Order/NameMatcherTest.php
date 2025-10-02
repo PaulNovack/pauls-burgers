@@ -4,7 +4,7 @@
 namespace Tests\Unit\Order;
 
 
-use PHPUnit\Framework\TestCase;
+use Tests\TestCase;
 use App\Services\Order\Parsing\NameMatcher;
 use App\Services\Order\TextNormalizerImpl;
 use Tests\Support\FakeMenuRepository;
