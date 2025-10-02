@@ -77,3 +77,6 @@ utterance,qty,id,name,with,without
 "Add a number five without onion.",1,5,,,"Onion"
 "Add a number of 5 without onion",1,5,,,"Onion"
 "at a number of five without onion.",1,5,,,"Onion"
+"at a number seven with Ranch Trusting.",1,7,,"Ranch Dressing",
+"Add a number one with Thousand Island Dressing",1,1,,"Thousand Island Dressing",
+"At a number 18 with Thousand Island ketchup mustard",1,19,,"Thousand Island Dressing|Ketchup|Mustard"

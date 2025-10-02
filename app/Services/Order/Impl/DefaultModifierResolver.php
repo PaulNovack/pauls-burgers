@@ -33,6 +33,12 @@ final class DefaultModifierResolver implements ModifierResolver
         'Mayo'            => ['mayo','mayonnaise'],
         'BBQ Sauce'       => ['bbq','bbq sauce','barbecue','barbeque'],
         'Ice'             => ['ice','with ice','no ice','without ice'], // canonical stays 'Ice'
+        // NEW: make “Ranch Dressing” resolvable (and catch common typos)
+        'Ranch Dressing'  => [
+            'ranch', 'ranch dressing', 'ranch sauce',
+            'ranch dresing', 'ranch drssing', 'ranch drsg', 'ranch trusting'
+        ],
+        'Thousand Island Dressing' => ['thousand island dressing','thousand island','1000 island'],
     ];
 
     /** Canonicalize + dedupe */
@@ -83,18 +89,25 @@ final class DefaultModifierResolver implements ModifierResolver
     {
         $raw = mb_strtolower(trim($s));
         if ($raw==='') return '';
+
         $title = $this->title($s);
 
-        // exact canonical
-        foreach (array_keys($this->synonyms) as $canon) if ($title === $canon) return $canon;
-
-        // synonym hits
-        foreach ($this->synonyms as $canon => $variants) {
-            foreach ($variants as $v) if ($raw === mb_strtolower($v)) return $canon;
+        // exact canonical name match
+        foreach (array_keys($this->synonyms) as $canon) {
+            if ($title === $canon) return $canon;
         }
 
-        // light fuzzy (distance<=2)
-        $best=''; $bestDist=3;
+        // exact variant match
+        foreach ($this->synonyms as $canon => $variants) {
+            foreach ($variants as $v) {
+                if ($raw === mb_strtolower($v)) return $canon;
+            }
+        }
+
+        // light fuzzy match across variants + canonicals
+        $best = '';
+        $bestDist = PHP_INT_MAX;
+
         foreach ($this->synonyms as $canon => $variants) {
             foreach ($variants as $v) {
                 $d = levenshtein($raw, mb_strtolower($v));
@@ -103,7 +116,11 @@ final class DefaultModifierResolver implements ModifierResolver
             $d2 = levenshtein($raw, mb_strtolower($canon));
             if ($d2 < $bestDist) { $bestDist = $d2; $best = $canon; }
         }
-        return $best !== '' ? $best : $title;
+
+        // accept only very close matches (e.g., "trusting" -> "dressing")
+        if ($best !== '' && $bestDist <= 3) return $best;
+
+        return $title;
     }
 
     private function normalizeCategory(?string $c): ?string

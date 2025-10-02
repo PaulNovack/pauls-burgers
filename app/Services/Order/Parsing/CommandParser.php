@@ -147,9 +147,18 @@ final class CommandParser
 
     private function splitList(string $s): array
     {
-        $s=trim($s); if($s==='') return [];
-        $parts=preg_split('/\s*(?:,|and|&)\s*/iu',$s)?:[];
-        $parts=array_map(fn($p)=>mb_convert_case(trim($p), MB_CASE_TITLE, 'UTF-8'),$parts);
-        return array_values(array_filter($parts,fn($p)=>$p!==''));
+        $s = trim($s);
+        if ($s === '') return [];
+
+        // Split on commas, '&', or the conjunction 'and' as a standalone word.
+        // This avoids breaking words like "Thousand" or "Island".
+        $parts = preg_split('/\s*(?:,|\band\b|&)\s*/iu', $s) ?: [];
+
+        $parts = array_map(
+            fn($p) => mb_convert_case(trim($p), MB_CASE_TITLE, 'UTF-8'),
+            $parts
+        );
+
+        return array_values(array_filter($parts, fn($p) => $p !== ''));
     }
 }
