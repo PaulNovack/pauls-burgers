@@ -1,0 +1,75 @@
+utterance,qty,id,name,with,without
+"add number two with cheddar and bacon",1,2,,"Cheddar Cheese|Bacon",
+"add two number five without onions",2,5,,,"Onion"
+"add a large lemonade",1,,lemonade,,
+"add veggie burger with jalapeno and blue cheese",1,,"veggie burger","Jalapeno|Blue Cheese",
+"remove fries without ketchup",1,,fries,,"Ketchup"
+"add onion rings",1,,"onion rings",,
+"add three number sixteen",3,16,,
+"Could you give me some tater tots?",1,,Tater Tots,,
+"Add tater tots?",1,,Tater Tots,,
+"Could you give me some tater tots",1,,tater tots,,
+"Could you Give me like two orders of garlic parmesan fries",2,,Garlic Parmesan Fries,,
+"Just add me some onion rings",1,,"onion rings",,
+"Just have me a diet coke",1,,"diet coke",,
+"Y'all thinking you could add me some onion rings",1,,"onion rings",,
+"Y'all think you could add me some tater tots?",1,,"tater tots",,
+"Well, I decided I want onion rings.",1,,"onion rings",,
+"You know, I'd like some army rings, I think.",1,,"army rings",,
+"Yeah, and add me some mac and cheese bites",1,,"mac and cheese bites",,
+"Yeah, and add me some pickle chips",1,,"pickle chips",,
+"Can y'all give me some chili cheese fries?",1,,"Chili Cheese Fries",,
+"Add me one of them number threes",1,3,,
+"Add two number fives with bacon and cheddar",2,5,,"Bacon|Cheddar Cheese",
+"Add #16s",1,16,,
+"Add no. 7 without onions",1,7,,,"Onion"
+"Add number three with jalapeños and mayo",1,3,,"Jalapeno|Mayo",
+"Add a large lemonade",1,,"lemonade",,
+"Add small fries with ketchup",1,,"fries","Ketchup",
+"Add regular onion rings",1,,"onion rings",,
+"Add veggie burger with blue cheese and bacon",1,,"veggie burger","Blue Cheese|Bacon",
+"Add cheese burger without pickles and mustard",1,,"cheese burger",,"Pickle|Mustard"
+"Add milkshake with mayo, ketchup and mustard",1,,"milkshake","Mayo|Ketchup|Mustard",
+"Add two onion rings without ketchup",2,,"onion rings",,"Ketchup"
+"Add pepper jack burger with pepperjack and jalapeno",1,,"pepper jack burger","Pepper Jack|Jalapeno",
+"Add bbq burger with bbq",1,,"bbq burger","BBQ Sauce",
+"Add coca cola",1,,"coca cola",,
+"Add mac and cheese bites",1,,"mac and cheese bites",,
+"Add large fries with ketchup and mayo",1,,"fries","Ketchup|Mayo",
+"Add small lemonade without ice",1,,"lemonade",,"Ice"
+"Add number 12's with bacon",1,12,,"Bacon",
+"Add number twenty one with cheddar",1,21,,"Cheddar Cheese",
+"Add number thirty-three without onions and pickles",1,33,,,"Onion|Pickle"
+"Add two number 5, with swiss cheese",2,5,,"Swiss Cheese",
+"Add three number sixteen",3,16,,
+"Add me one of them number threes",1,3,,
+"Add a couple of orders of onion rings",2,,"onion rings",,
+"Add some tater tots",1,,"tater tots",,
+"Add orders of curly fries with ketchup",1,,"curly fries","Ketchup",
+"Add large diet coke",1,,"diet coke",,
+"Add regular coca cola",1,,"coca cola",,
+"Add veggie burger with jalapeno, tomato and lettuce",1,,"veggie burger","Jalapeno|Tomato|Lettuce",
+"Add cheese burger with american cheese",1,,"cheese burger","American Cheese",
+"Add cheese burger without tomato, pickles and onion",1,,"cheese burger",,"Tomato|Pickle|Onion"
+"Add fries without ketchup and mustard",1,,"fries",,"Ketchup|Mustard"
+"Add onion rings with mayo and mustard",1,,"onion rings","Mayo|Mustard",
+"Add small lemonade with bacon",1,,"lemonade","Bacon",
+"Add swiss burger with swiss",1,,"swiss burger","Swiss Cheese",
+"Add bbq chicken sandwich with bbq sauce",1,,"bbq chicken sandwich","BBQ Sauce",
+"Add jalapeno poppers",1,,"jalapeno poppers",,
+"Add blue cheese burger with bleu cheese",1,,"blue cheese burger","Blue Cheese",
+"Add pepperjack burger with pepper jack",1,,"pepperjack burger","Pepper Jack",
+"Add pickle chips",1,,"pickle chips",,
+"Add tomato soup without onion",1,,"tomato soup",,"Onion"
+"Add lettuce wrap veggie burger",1,,"veggie burger",,
+"Add number four with bacon and mayo",1,4,,"Bacon|Mayo",
+"Add #9 without onions",1,9,,,"Onion"
+"Add no. 11 with cheddar cheese and jalapeno",1,11,,"Cheddar Cheese|Jalapeno",
+"Add number nineteen with blue cheese",1,19,,"Blue Cheese",
+"Add number sixty with swiss cheese",1,60,,"Swiss Cheese",
+"Add a large fries with ketchup and bbq",1,,"fries","Ketchup|BBQ Sauce",
+"Add a regular milkshake",1,,"milkshake",,
+"Add some mac & cheese bites",1,,"mac & cheese bites",,
+"Add two orders of tater tots with ketchup",2,,"tater tots","Ketchup",
+"Had a lemonade with no ice",1,,"lemonade",,"Ice"
+"Had a lemonade without ice",1,,"lemonade",,"Ice"

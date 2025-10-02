@@ -31,6 +31,8 @@ return [
         "Swiss Cheese",
         "Tomato",
         "Veggie Patty",
+        "Ranch Dressing",
+        "Thousand Island Dressing",
     ],
 
     // Catalog keyed by numeric ID for quick lookup
