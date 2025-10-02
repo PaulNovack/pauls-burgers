@@ -13,138 +13,105 @@ final class TextNormalizerImpl implements TextNormalizer
     {
         $s = trim($s ?? '');
         $s = preg_replace('/\s+/u', ' ', $s) ?? $s;
-        Log::info('norm #1', [$s]);
-
-        // strip trailing punctuation
         $s = preg_replace('/[.!?]+$/u', '', $s) ?? $s;
 
-        // light fillers at the very start
-        $s = preg_replace(
-            '/^\s*(?:well|you know|ya know|so|hey)[, ]+/iu',
-            '',
-            $s
-        ) ?? $s;
-        Log::info('norm #2a', [$s]);
+        // drop light fillers at the very start
+        $s = preg_replace('/^\s*(?:well|you know|ya know|so|hey)[, ]+/iu', '',
+            $s) ?? $s;
 
-        // map lead-ins → "add "
-        $s = preg_replace(
-            '/^\s*(?:and\s+at|and|also|plus|yeah|yep|ok|okay|uh|um|please|then'.
-            '|at|i\s+want|i\'?d\s+like|i\s+would\s+like|i\'?ll\s+have|give\s+me'.
-            '|gimme|include|i\s+need|could\s+i\s+have|can\s+i\s+get|may\s+i\s+have'.
-            '|could\s+you\s+(?:give\s+me|add)|can\s+you\s+(?:give\s+me|add)'.
-            '|would\s+you\s+(?:give\s+me|add)'.
-            '|y[\'’]?all\s+(?:think(?:ing)?\s+you\s+could|can|could)\s+add'.
-            '(?:\s+me)?'.
-            '|(?:i\s+had|had)\s+(?:a|an))\b[,:-]?\s*/iu',
-            'add ',
-            $s
-        ) ?? $s;
+        // polite / helper forms → "add "
+        $s = preg_replace('/^\s*(?:could|can)\s+(?:you|y[\'’]?all)\s+give\s+me'
+            . '\s+(?:some\s+)?/iu', 'add ', $s) ?? $s;
+        $s = preg_replace('/^\s*just\s+add\s+me\s+(?:some\s+)?/iu',
+            'add ', $s) ?? $s;
+        $s = preg_replace('/^\s*just\s+have\s+me\s+(?:a\s+|an\s+)?/iu',
+            'add ', $s) ?? $s;
+        $s = preg_replace('/^\s*y[\'’]?all\s+(?:think(?:ing)?\s+you\s+could|can'
+            . '|could)\s+add\s+me\s+(?:some\s+)?/iu',
+            'add ', $s) ?? $s;
+        $s = preg_replace('/^\s*(?:well[, ]+)?i\s+decided\s+i\s+want\s+/iu',
+            'add ', $s) ?? $s;
+        $s = preg_replace('/^\s*(?:and|also|plus|yeah|yep|ok|okay|uh|um|please|'
+            . 'then|at|i\s+want|i\'?d\s+like|i\s+would\s+like|'
+            . 'i\'?ll\s+have|give\s+me|gimme|include|could\s+i\s+'
+            . 'have|can\s+i\s+get|may\s+i\s+have|i\s+need)\b[,:-]?'
+            . '\s*/iu', 'add ', $s) ?? $s;
 
-        // extra polite/variant starters
-        $s = preg_replace(
-            '/^\s*(?:could|can)\s+(?:you|y[\'’]?all)\s+give\s+me\s+(?:some\s+)?/iu',
-            'add ',
-            $s
-        ) ?? $s;
-        $s = preg_replace('/^\s*just\s+add\s+me\s+(?:some\s+)?/iu', 'add ', $s) ?? $s;
-        $s = preg_replace(
-            '/^\s*y[\'’]?all\s+(?:think(?:ing)?\s+you\s+could|can|could)\s+add'.
-            '\s+me\s+(?:some\s+)?/iu',
-            'add ',
-            $s
-        ) ?? $s;
-        $s = preg_replace(
-            '/^\s*(?:yeah|yep|ok|okay)\s*,?\s*(?:and\s+)?add\s+me\s+(?:some\s+)?/iu',
-            'add ',
-            $s
-        ) ?? $s;
-        $s = preg_replace(
-            '/^\s*(?:well[, ]+)?i\s+decided\s+i\s+want\s+/iu',
-            'add ',
-            $s
-        ) ?? $s;
-        Log::info('norm #3', [$s]);
+        // past-tense "had a/an …"
+        $s = preg_replace('/^\s*(?:i\s+had|had)\s+(?:a|an)\s+/iu',
+            'add ', $s) ?? $s;
 
-        // clean determiners/junk after "add"
-        $s = preg_replace(
-            '/^\s*add\s+(?:(?:and|in|on|to|for|please|me|us|the|a|an|some|'.
-            'order|orders|of|them)\s+)+/iu',
-            'add ',
-            $s
-        ) ?? $s;
+        // misheard "at a number (of) …"
+        $s = preg_replace('/^\s*at\s+(?:a\s+)?number\s+(?:of\s+)?/iu',
+            'add number ', $s) ?? $s;
 
-        // collapse "add and add"/"add add"
-        $s = preg_replace('/^\s*add\s+(?:and\s+)?add\s+/iu', 'add ', $s) ?? $s;
+        // "add me one of them …" / "add one of them …"
+        $s = preg_replace('/^\s*add\s+(?:me\s+)?one\s+of\s+them\s+/iu',
+            'add ', $s) ?? $s;
 
-        // "add like two ..." → "add two ..."
-        $s = preg_replace(
-            '/\badd\s+like\s+(?=(?:one|two|to|too|three|four|for|five|six|seven'.
-            '|eight|nine|ten|\d+)\b)/iu',
-            'add ',
-            $s
-        ) ?? $s;
+        // clean determiners right after "add"
+        $s = preg_replace('/^\s*add\s+(?:(?:in|on|to|for|please|me|us|the|a|an|'
+            . 'some)\s+)+/iu', 'add ', $s) ?? $s;
 
-        // ASR: "at a number ..." → "add number ..."
-        $s = preg_replace('/^\s*at\s+(?:a\s+)?number\b/iu', 'add number ', $s) ?? $s;
+        // quantities and counts
+        $s = preg_replace('/\badd\s+like\s+(?=(?:\d+|one|two|to|too|three|four|'
+            . 'for|five|six|seven|eight|nine|ten|eleven|twelve)\b)'
+            . '/iu', 'add ', $s) ?? $s;
+        $s = preg_replace('/\badd\s+(?:to|too)\b/iu', 'add two', $s) ?? $s;
+        $s = preg_replace('/\badd\s+(?:a\s+)?couple\s+of\s+/iu',
+            'add two ', $s) ?? $s;
 
-        // "one of them number threes" → "number threes"
-        $s = preg_replace('/\bone\s+of\s+them\s+(?=number\b)/iu', '', $s) ?? $s;
+        // drop "orders of" after optional qty
+        $s = preg_replace('/\badd\s+((?:\d+|one|two|to|too|three|four|for|five|'
+            . 'six|seven|eight|nine|ten|eleven|twelve)\s+)?(?:a\s+)?'
+            . 'orders?\s+of\s+/iu', 'add ${1}', $s) ?? $s;
 
-        // "number of 5" → "number 5"
-        $s = preg_replace('/\bnumber\s+of\s+/iu', 'number ', $s) ?? $s;
+        // "#16s" → "number 16" (digits)
+        $s = preg_replace('/\b(?:number|no\.|#)\s*(\d+)\s*(?:\'s|’s|s|es)\b/iu',
+            'number $1', $s) ?? $s;
 
-        // "add <qty> orders of X" → "add <qty> X"
-        $s = preg_replace(
-            '/\b(add\s+(?:\d+|one|two|to|too|three|four|for|five|six|seven|'.
-            'eight|nine|ten|eleven|twelve)\s+)(?:orders?|order)\s+of\b/iu',
-            '$1',
-            $s
-        ) ?? $s;
-        // "add orders of X" → "add X"
-        $s = preg_replace('/\badd\s+(?:orders?|order)\s+of\b/iu', 'add ', $s) ?? $s;
+        // "number threes" → "number three" (words)
+        $s = preg_replace('/\b(?:number|no\.|#)\s+([a-z]+(?:\s+[a-z]+)*)\s*'
+            . '(?:\'s|’s|s|es)\b/iu', 'number $1', $s) ?? $s;
 
-        // negations: "with no" / "no X" → "without X"
-        $s = preg_replace('/\bwith\s+no\s+/iu', ' without ', $s) ?? $s;
-        $s = preg_replace('/\bno\s+(?=[a-z])/iu', 'without ', $s) ?? $s;
+        // "number of five" → "number five"
+        $s = preg_replace('/\bnumber\s+of\s+(\w+)/iu', 'number $1', $s) ?? $s;
 
-        Log::info('norm #4', [$s]);
-
-        // number words after "number" → digits
-        $s = preg_replace_callback(
-            '/\b(?:number|no\.|#)\s*('.
-            '(?:zero|one|two|to|too|three|four|for|five|six|seven|eight|nine|'.
-            'ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|'.
-            'eighteen|nineteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|'.
-            'ninety|hundred|thousand)'.
-            '(?:[-\s]+'.
-            '(?:zero|one|two|to|too|three|four|for|five|six|seven|eight|nine|'.
-            'ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|'.
-            'eighteen|nineteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|'.
-            'ninety|hundred|thousand)'.
-            ')*'.
-            ')\b/iu',
+        // number <words> → number <digits>
+        $s = preg_replace_callback('/\b(?:number|no\.|#)\s*('
+            . '(?:zero|one|two|to|too|three|four|for|five|six|seven|'
+            . 'eight|nine|ten|eleven|twelve|thirteen|fourteen|'
+            . 'fifteen|sixteen|seventeen|eighteen|nineteen|twenty|'
+            . 'thirty|forty|fifty|sixty|seventy|eighty|ninety|'
+            . 'hundred|thousand)(?:[-\s]+(?:zero|one|two|to|too|'
+            . 'three|four|for|five|six|seven|eight|nine|ten|eleven|'
+            . 'twelve|thirteen|fourteen|fifteen|sixteen|seventeen|'
+            . 'eighteen|nineteen|twenty|thirty|forty|fifty|sixty|'
+            . 'seventy|eighty|ninety|hundred|thousand))*'
+            . ')\b/iu',
             function ($m) {
-                $phrase = $this->normalizeNumberWord($m[1]);
-                $n = $this->wordsToNumber($phrase);
-                return 'number '.$n;
+                $p = $this->normalizeNumberWord($m[1]);
+                $n = $this->wordsToNumber($p);
+                return 'number ' . $n;
             },
             $s
         ) ?? $s;
 
-        // "number 3s/3's/3es" → "number 3"
-        $s = preg_replace(
-            '/\b(?:number|no\.|#)\s*(\d+)\s*(?:\'s|’s|s|es)\b/iu',
-            'number $1',
-            $s
-        ) ?? $s;
+        // "with no X" / "no X" → "without X"
+        $s = preg_replace('/\bwith\s+no\s+/iu', ' without ', $s) ?? $s;
+        $s = preg_replace('/\bno\s+(?=[a-z])/iu', 'without ', $s) ?? $s;
 
-        Log::info('norm #5', [$s]);
+        // collapse "add and add …"
+        $s = preg_replace('/^\s*add\s+(?:and\s+)?add\s+/iu', 'add ', $s) ?? $s;
 
-        // keep command text un-lexified (names are lexified on the name side)
-        return $s;
+        // trim trailing hedge "…, i think"
+        $s = preg_replace('/\s*,?\s*i\s+think\s*$/iu', '', $s) ?? $s;
+
+        // light lexify, tidy, lowercase
+        $s = $this->lexify($s);
+        $s = preg_replace('/\s+/u', ' ', $s) ?? $s;
+        return trim(mb_strtolower($s));
     }
-
-
 
     public function normalizeSize(?string $size): ?string
     {
@@ -164,6 +131,17 @@ final class TextNormalizerImpl implements TextNormalizer
         $tokens = array_filter(explode(' ',$s));
         $tokens = array_map([$this,'singularize'],$tokens);
         return implode(' ',$tokens);
+    }
+
+    private function lexify(string $s): string
+    {
+        // Normalize common spellings without changing menu names
+        $s = preg_replace('/\bbarbe?cue\b/iu', 'bbq', $s) ?? $s;
+        $s = preg_replace('/\bbar[-\s]*b[-\s]*q\b/iu', 'bbq', $s) ?? $s;
+        $s = preg_replace('/\bb\.?\s*b\.?\s*q\.?\b/iu', 'bbq', $s) ?? $s;
+        $s = preg_replace('/\bmilk[-\s]*shake\b/iu', 'milkshake', $s) ?? $s;
+        $s = preg_replace('/\bjalapeñ?o?s?\b/iu', 'jalapeno', $s) ?? $s;
+        return $s;
     }
 
     public function stripDiacritics(string $s): string
