@@ -150,28 +150,105 @@ final class CommandParser
     /** split modifiers by commas/&/and and segment with a topping dictionary */
     /** Greedy, topping-aware list splitter (won't split "Thousand") */
     /** Split on commas and standalone "and/&", but never inside "Thousand Island". */
+    /** Split toppings list, aware of multi-word toppings. */
     private function splitList(string $s): array
     {
         $s = trim($s);
         if ($s === '') return [];
 
-        // ASR fixups that help recognition
+        // Common ASR fixups that help recognition
         $s = preg_replace('/\branch\s+trusting\b/iu', 'ranch dressing', $s) ?? $s;
 
-        // Protect "Thousand Island" so the "and" inside isn't treated as a splitter
-        $s = preg_replace('/\b(thousand)\s+(island)\b/iu', '$1_island', $s) ?? $s;
+        // Protect "thousand island" so inner "and" isn't treated as a splitter
+        $s = preg_replace('/\b(thousand)\s+(island)\b/iu', '$1_$2', $s) ?? $s;
 
-        // Split on commas or standalone "and"/"&"
-        $parts = preg_split('/\s*(?:,|\band\b|&)\s*/iu', $s) ?: [];
+        // Coarse split on commas or standalone "and"/"&"
+        $chunks = preg_split('/\s*(?:,|\band\b|&)\s*/iu', $s) ?: [];
 
-        // Restore placeholder and tidy
-        $parts = array_map(function ($p) {
-            $p = str_ireplace('thousand_island', 'thousand island', $p);
-            return mb_convert_case(trim($p), MB_CASE_TITLE, 'UTF-8');
-        }, $parts);
+        // Greedy split within each chunk using known topping terms
+        $known = $this->knownModTerms(); // lower-cased strings
+        $out = [];
 
-        // Remove empties
-        return array_values(array_filter($parts, fn($p) => $p !== ''));
+        foreach ($chunks as $chunk) {
+            $chunk = trim($chunk);
+            if ($chunk === '') continue;
+
+            // Restore placeholder
+            $chunk = str_ireplace('thousand_island', 'thousand island', $chunk);
+
+            // If the whole chunk is a known term, keep it as one
+            $lc = mb_strtolower($chunk);
+            if (in_array($lc, $known, true)) {
+                $out[] = mb_convert_case($lc, MB_CASE_TITLE, 'UTF-8');
+                continue;
+            }
+
+            // Greedy word scan (handles no punctuation, e.g. "ketchup mustard")
+            $words = preg_split('/\s+/u', $lc) ?: [];
+            $i = 0;
+            while ($i < count($words)) {
+                $best = null; $bestLen = 0;
+
+                // Support up to 3-word toppings (e.g. thousand island dressing)
+                for ($len = min(3, count($words) - $i); $len >= 1; $len--) {
+                    $phrase = implode(' ', array_slice($words, $i, $len));
+                    if (in_array($phrase, $known, true)) {
+                        $best = $phrase; $bestLen = $len; break;
+                    }
+                }
+
+                if ($best !== null) {
+                    $out[] = mb_convert_case($best, MB_CASE_TITLE, 'UTF-8');
+                    $i += $bestLen;
+                } else {
+                    // Skip common filler tokens
+                    if (!preg_match('/^(with|without|of|a|an|the|some)$/u', $words[$i])) {
+                        $out[] = mb_convert_case($words[$i], MB_CASE_TITLE, 'UTF-8');
+                    }
+                    $i++;
+                }
+            }
+        }
+
+        // Remove empties and dupes (order preserved)
+        $seen = [];
+        $out = array_values(array_filter($out, function ($x) use (&$seen) {
+            $k = mb_strtolower($x);
+            if ($k === '' || isset($seen[$k])) return false;
+            $seen[$k] = true;
+            return true;
+        }));
+
+        return $out;
+    }
+
+    /** Minimal dictionary used for greedy splitting (lower-cased). */
+    private function knownModTerms(): array
+    {
+        static $terms;
+        if ($terms !== null) return $terms;
+
+        $canon = [
+            'cheddar cheese','swiss cheese','american cheese','pepper jack',
+            'blue cheese','bacon','onion','pickle','tomato','lettuce',
+            'jalapeno','ketchup','mustard','mayo','bbq sauce',
+            'ranch dressing','thousand island dressing','ice',
+        ];
+
+        $variants = [
+            'cheddar','extra cheddar','swiss','american','pepperjack',
+            'bleu cheese','bleu','onions','grilled onion','grilled onions',
+            'pickles','tomatoes','jalapenos','jalapeño','jalapeños',
+            'yellow mustard','mayonnaise','bbq','barbecue','barbeque',
+            'ranch','thousand island',
+        ];
+
+        $terms = array_unique(array_map(
+            fn($x) => mb_strtolower($x),
+            array_merge($canon, $variants)
+        ));
+
+        return $terms;
     }
 
     /** Minimal dictionary used only for phrase boundary detection */
