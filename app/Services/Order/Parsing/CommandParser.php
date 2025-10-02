@@ -145,20 +145,89 @@ final class CommandParser
         return ['one'=>1,'two'=>2,'to'=>2,'too'=>2,'three'=>3,'four'=>4,'for'=>4,'five'=>5,'six'=>6,'seven'=>7,'eight'=>8,'nine'=>9,'ten'=>10,'eleven'=>11,'twelve'=>12][$s] ?? 0;
     }
 
+// app/Services/Order/Parsing/CommandParser.php
+
+    /** split modifiers by commas/&/and and segment with a topping dictionary */
+    /** Greedy, topping-aware list splitter (won't split "Thousand") */
+    /** Split on commas and standalone "and/&", but never inside "Thousand Island". */
     private function splitList(string $s): array
     {
         $s = trim($s);
         if ($s === '') return [];
 
-        // Split on commas, '&', or the conjunction 'and' as a standalone word.
-        // This avoids breaking words like "Thousand" or "Island".
+        // ASR fixups that help recognition
+        $s = preg_replace('/\branch\s+trusting\b/iu', 'ranch dressing', $s) ?? $s;
+
+        // Protect "Thousand Island" so the "and" inside isn't treated as a splitter
+        $s = preg_replace('/\b(thousand)\s+(island)\b/iu', '$1_island', $s) ?? $s;
+
+        // Split on commas or standalone "and"/"&"
         $parts = preg_split('/\s*(?:,|\band\b|&)\s*/iu', $s) ?: [];
 
-        $parts = array_map(
-            fn($p) => mb_convert_case(trim($p), MB_CASE_TITLE, 'UTF-8'),
-            $parts
-        );
+        // Restore placeholder and tidy
+        $parts = array_map(function ($p) {
+            $p = str_ireplace('thousand_island', 'thousand island', $p);
+            return mb_convert_case(trim($p), MB_CASE_TITLE, 'UTF-8');
+        }, $parts);
 
+        // Remove empties
         return array_values(array_filter($parts, fn($p) => $p !== ''));
     }
+
+    /** Minimal dictionary used only for phrase boundary detection */
+    private function modsDict(): array
+    {
+        static $d = null;
+        if ($d !== null) return $d;
+
+        $known = [
+            // multi-word first
+            'thousand island dressing', 'thousand island', 'ranch dressing',
+            'blue cheese', 'bleu cheese', 'swiss cheese', 'cheddar cheese',
+            'american cheese', 'pepper jack', 'grilled onions', 'bbq sauce',
+
+            // single-word
+            'ketchup', 'mustard', 'mayo', 'bbq', 'jalapeno', 'ice',
+        ];
+
+        $d = [];
+        foreach ($known as $k) $d[mb_strtolower($k)] = true;
+        return $d;
+    }
+
+
+    private function isKnownMod(string $p): bool
+    {
+        static $dict = null;
+        if ($dict === null) {
+            // Include multi-word items first so longest-match wins.
+            $dict = array_fill_keys([
+                'thousand island dressing',
+                'thousand island',
+                'ranch dressing',
+                'blue cheese',
+                'bleu cheese',
+                'bbq sauce',
+                'pepper jack',
+                'cheddar cheese',
+                'swiss cheese',
+                'american cheese',
+                'grilled onions',
+                'jalapeno',
+                'ketchup',
+                'mustard',
+                'mayo',
+                'bbq',
+                'ice',
+            ], true);
+        }
+        return isset($dict[mb_strtolower(trim($p))]);
+    }
+
+    private function title(string $s): string
+    {
+        return mb_convert_case(trim($s), MB_CASE_TITLE, 'UTF-8');
+    }
+
+
 }

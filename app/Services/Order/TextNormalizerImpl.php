@@ -19,6 +19,8 @@ final class TextNormalizerImpl implements TextNormalizer
         $s = preg_replace('/^\s*(?:well|you know|ya know|so|hey)[ ,]+/iu', '', $s)
             ?? $s;
 
+        $s = preg_replace('/^\s*i\s+won\s+a[n]?\b[,:-]?\s*/iu', 'add ', $s) ?? $s;
+
         // lead-ins → "add "
         $s = preg_replace('/^\s*just\s+add\s+me\s+(?:some\s+)?/iu', 'add ', $s)
             ?? $s;
@@ -144,6 +146,14 @@ final class TextNormalizerImpl implements TextNormalizer
         // final whitespace + lexify
         $s = preg_replace('/\s+/u', ' ', $s) ?? $s;
         $s = trim($s);
+        // "with no X" / "no X" → "without X"
+        $s = preg_replace('/\bwith\s+no\s+/iu', ' without ', $s) ?? $s;
+        $s = preg_replace('/\bno\s+(?=[a-z])/iu', 'without ', $s) ?? $s;
+
+        // "I won a ..." (ASR of "I want a") → "add ..."
+        $s = preg_replace('/^\s*i\s*won\s+a\s+/iu', 'add ', $s) ?? $s;
+
+
         $s = $this->lexify($s);
         return $s;
     }

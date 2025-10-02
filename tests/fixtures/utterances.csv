@@ -80,6 +80,6 @@ utterance,qty,id,name,with,without
 "at a number seven with Ranch Trusting.",1,7,,"Ranch Dressing",
 "Add a number one with Thousand Island Dressing",1,1,,"Thousand Island Dressing",
 "At a number 18 with Thousand Island ketchup mustard",1,18,,"Thousand Island Dressing|Ketchup|Mustard"
-"I won a number 41 no Ice.",1,41,,"Ice"
-"I want a number 41 without Ice.",,1,41,"Ice"
+"I won a number 41 no Ice.",1,41,,,"Ice"
+"I want a number 41 without Ice.",1,41,,,"Ice"
 
