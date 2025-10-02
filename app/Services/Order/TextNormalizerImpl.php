@@ -13,111 +13,77 @@ final class TextNormalizerImpl implements TextNormalizer
     {
         $s = trim($s ?? '');
         $s = preg_replace('/\s+/u', ' ', $s) ?? $s;
-        Log::info('norm #1 collapse ws', [$s]);
-
-        // strip trailing sentence punctuation
         $s = preg_replace('/[.!?]+$/u', '', $s) ?? $s;
-        Log::info('norm #2 strip punc', [$s]);
 
-        // light fillers at the very start
-        $s = preg_replace(
-            '/^\s*(?:well|you know|ya know|so|hey)\s*[ ,]+/iu',
-            '',
-            $s
-        ) ?? $s;
-        Log::info('norm #3 drop fillers', [$s]);
+        // light fillers
+        $s = preg_replace('/^\s*(?:well|you know|ya know|so|hey)[ ,]+/iu', '', $s)
+            ?? $s;
 
-        // map assorted lead-ins to "add "
-        $s = preg_replace(
-            '/^\s*just\s+add\s+me\s+(?:some\s+)?/iu',
-            'add ',
-            $s
-        ) ?? $s;
-        $s = preg_replace(
-            '/^\s*just\s+have\s+me\s+(?:a|an)\s+/iu',
-            'add ',
-            $s
-        ) ?? $s;
-        $s = preg_replace(
-            '/^\s*(?:can|could|would)\s+y[\'’]?all\s+'
-            . '(?:give\s+me|add)\s+(?:some\s+)?/iu',
-            'add ',
-            $s
-        ) ?? $s;
-        $s = preg_replace(
-            '/^\s*(?:can|could|would)\s+you\s+'
-            . '(?:give\s+me|add)\s+(?:some\s+)?/iu',
-            'add ',
-            $s
-        ) ?? $s;
-        $s = preg_replace(
-            '/^\s*y[\'’]?all\s+(?:think(?:ing)?\s+you\s+could|can|could)\s+'
-            . 'add\s+me\s+(?:some\s+)?/iu',
-            'add ',
-            $s
-        ) ?? $s;
-        $s = preg_replace('/^\s*i\s+decided\s+i\s+want\s+/iu', 'add ', $s)
+        // lead-ins → "add "
+        $s = preg_replace('/^\s*just\s+add\s+me\s+(?:some\s+)?/iu', 'add ', $s)
+            ?? $s;
+        $s = preg_replace('/^\s*just\s+have\s+me\s+(?:a|an)\s+/iu', 'add ', $s)
             ?? $s;
         $s = preg_replace(
-            '/^\s*(?:yeah|yep|ok|okay)\s*,?\s*(?:and\s+)?add\s+me\s+'
-            . '(?:some\s+)?/iu',
-            'add ',
-            $s
+            '/^\s*(?:can|could|would)\s+y[\'’]?all\s+(?:give\s+me|add)\s+'
+            . '(?:some\s+)?/iu', 'add ', $s
+        ) ?? $s;
+        $s = preg_replace(
+            '/^\s*(?:can|could|would)\s+you\s+(?:give\s+me|add)\s+(?:some\s+)?/iu',
+            'add ', $s
+        ) ?? $s;
+        $s = preg_replace(
+            '/^\s*y[\'’]?all\s+(?:think(?:ing)?\s+you\s+could|can|could)\s+add\s+'
+            . 'me\s+(?:some\s+)?/iu', 'add ', $s
+        ) ?? $s;
+        $s = preg_replace('/^\s*i\s+decided\s+i\s+want\s+/iu', 'add ', $s) ?? $s;
+        $s = preg_replace(
+            '/^\s*(?:yeah|yep|ok|okay)\s*,?\s*(?:and\s+)?add\s+me\s+(?:some\s+)?/iu',
+            'add ', $s
         ) ?? $s;
         $s = preg_replace(
             '/^\s*(?:and\s+at|and|also|plus|yeah|yep|ok|okay|uh|um|please|then|'
-            . 'at|i\s+want|i\'?d\s+like|i\s+would\s+like|i\'?ll\s+have|'
-            . 'give\s+me|gimme|include|could\s+i\s+have|can\s+i\s+get|'
-            . 'may\s+i\s+have|i\s+need|you\s+know\s*,?\s*i\'?d\s+like)'
-            . '\b[,:-]?\s*/iu',
-            'add ',
-            $s
+            . 'at|i\s+want|i\'?d\s+like|i\s+would\s+like|i\'?ll\s+have|give\s+me|'
+            . 'gimme|include|could\s+i\s+have|can\s+i\s+get|may\s+i\s+have|'
+            . 'i\s+need)\b[,:-]?\s*/iu',
+            'add ', $s
         ) ?? $s;
         $s = preg_replace('/^\s*(?:i\s+had|had)\s+(?:a|an)\s+/iu', 'add ', $s)
             ?? $s;
-        Log::info('norm #4 lead-ins→add', [$s]);
 
-        // clean determiners immediately after "add"
+        // clean determiners after "add"
         $s = preg_replace(
             '/^\s*add\s+(?:(?:in|on|to|for|please|me|us|the|a|an|some)\s+)+/iu',
-            'add ',
-            $s
+            'add ', $s
         ) ?? $s;
 
-        // collapse "add and add" → "add "
+        // collapse "add and add"
         $s = preg_replace('/^\s*add\s+(?:and\s+)?add\s+/iu', 'add ', $s) ?? $s;
 
         // "add like two ..." → "add two ..."
         $s = preg_replace(
-            '/\badd\s+like\s+(?=(?:one|two|to|too|three|four|for|five|six|'
-            . 'seven|eight|nine|ten|\d+)\b)/iu',
-            'add ',
-            $s
+            '/\badd\s+like\s+(?=(?:one|two|to|too|three|four|for|five|six|seven|'
+            . 'eight|nine|ten|\d+)\b)/iu', 'add ', $s
         ) ?? $s;
 
         // "add (two)? orders of X" → "add (two) X"
         $s = preg_replace(
-            '/\badd\s+(?:(\d+|one|two|to|too|three|four|for|five|six|seven|'
-            . 'eight|nine|ten)\s+)?orders?\s+of\s+/iu',
-            'add $1 ',
-            $s
+            '/\badd\s+(?:(\d+|one|two|to|too|three|four|for|five|six|seven|eight|'
+            . 'nine|ten)\s+)?orders?\s+of\s+/iu',
+            'add $1 ', $s
         ) ?? $s;
 
-        // "add a couple of (orders of)? X" → "add two X"
+        // "a couple of (orders of) X" → "two X"
         $s = preg_replace(
             '/\badd\s+(?:a\s+)?couple\s+of\s+(?:orders?\s+of\s+)?/iu',
-            'add two ',
-            $s
+            'add two ', $s
         ) ?? $s;
 
-        // "one of them number threes" → "number three"
-        $s = preg_replace(
-            '/\b(?:a|one)\s+of\s+them\s+(?=number\b)/iu',
-            '',
-            $s
-        ) ?? $s;
+        // "one of them number threes" → "number threes" (then 3 via rules below)
+        $s = preg_replace('/\b(?:a|one)\s+of\s+them\s+(?=number\b)/iu', '', $s)
+            ?? $s;
 
-        // misheard "add" as "at" before number
+        // ASR: "at a number ..." → "add number ..."
         $s = preg_replace('/^\s*at\s+(?:a\s+)?number\b/iu', 'add number ', $s)
             ?? $s;
 
@@ -125,46 +91,59 @@ final class TextNormalizerImpl implements TextNormalizer
         $s = preg_replace('/\bwith\s+no\s+/iu', ' without ', $s) ?? $s;
         $s = preg_replace('/\bno\s+(?=[a-z])/iu', 'without ', $s) ?? $s;
 
-        // drop trailing ", I think" noise (comma optional)
+        // drop trailing ", I think"
         $s = preg_replace('/(?:,\s*)?i\s+think\.?\s*$/iu', '', $s) ?? $s;
 
-        // number <words> → number <digits>
+        // --- number normalization fixes ---
+
+        // "number of 5" → "number 5"
+        $s = preg_replace('/\bnumber\s+of\s+(\d+)\b/iu', 'number $1', $s) ?? $s;
+
+        // "number of five(s)" → "number 5"
+        $s = preg_replace_callback(
+            '/\bnumber\s+of\s+('
+            . '(?:zero|one|two|to|too|three|four|for|five|six|seven|eight|nine|'
+            . 'ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|'
+            . 'eighteen|nineteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|'
+            . 'ninety|hundred|thousand)'
+            . '(?:[-\s]+(?:zero|one|two|three|four|five|six|seven|eight|nine))?'
+            . ')(?:\'s|’s|s|es|ies)?\b/iu',
+            function ($m) {
+                $w = $this->normalizeNumberWord($m[1]);
+                return 'number ' . $this->wordsToNumber($w);
+            },
+            $s
+        ) ?? $s;
+
+        // "#16s" / "no. 16s" → "number 16"
+        $s = preg_replace(
+            '/\b(?:number|no\.|#)\s*(\d+)\s*(?:\'s|’s|s|es)\b/iu',
+            'number $1', $s
+        ) ?? $s;
+
+        // "number three(s)" → "number 3"  (plural tolerated)
         $s = preg_replace_callback(
             '/\b(?:number|no\.|#)\s*('
             . '(?:zero|one|two|to|too|three|four|for|five|six|seven|eight|nine|'
             . 'ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|'
-            . 'eighteen|nineteen|twenty|thirty|forty|fifty|sixty|seventy|'
-            . 'eighty|ninety|hundred|thousand)'
-            . '(?:[-\s]+(?:zero|one|two|to|too|three|four|for|five|six|seven|'
-            . 'eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|'
-            . 'seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty|'
-            . 'seventy|eighty|ninety|hundred|thousand))*'
-            . ')\b/iu',
+            . 'eighteen|nineteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|'
+            . 'ninety|hundred|thousand)'
+            . '(?:[-\s]+(?:zero|one|two|three|four|five|six|seven|eight|nine))?'
+            . ')(?:\'s|’s|s|es|ies)?\b/iu',
             function ($m) {
-                $phrase = $this->normalizeNumberWord($m[1]);
-                $n = $this->wordsToNumber($phrase);
-                return 'number ' . $n;
+                $w = $this->normalizeNumberWord($m[1]);
+                return 'number ' . $this->wordsToNumber($w);
             },
             $s
         ) ?? $s;
-        Log::info('norm #5 words→num', [$s]);
 
-        // "#16s" / "no. 16s" / "number 16s" → "number 16"
-        $s = preg_replace(
-            '/(?:number|no\.|#)\s*(\d+)\s*(?:\'s|’s|s|es)\b/iu',
-            'number $1',
-            $s
-        ) ?? $s;
-
-        // final whitespace collapse (for backref gaps like "add  X")
+        // final whitespace + lexify
         $s = preg_replace('/\s+/u', ' ', $s) ?? $s;
         $s = trim($s);
-
-        // final lexify (bbq, milkshake, mac & cheese, etc.)
         $s = $this->lexify($s);
-
         return $s;
     }
+
 
     public function normalizeSize(?string $size): ?string
     {
