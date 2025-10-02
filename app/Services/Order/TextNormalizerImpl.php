@@ -115,11 +115,15 @@ final class TextNormalizerImpl implements TextNormalizer
             $s
         ) ?? $s;
 
+        $s = preg_replace('/#/u', 'number ', $s) ?? $s;
+
         // "#16s" / "no. 16s" → "number 16"
         $s = preg_replace(
             '/\b(?:number|no\.|#)\s*(\d+)\s*(?:\'s|’s|s|es)\b/iu',
             'number $1', $s
         ) ?? $s;
+
+
 
         // "number three(s)" → "number 3"  (plural tolerated)
         $s = preg_replace_callback(

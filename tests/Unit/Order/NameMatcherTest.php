@@ -22,7 +22,11 @@ final class NameMatcherTest extends TestCase
         $idLarge = $matcher->findMenuIdByName('lemonade', 'Large');
         $this->assertSame(46, $idLarge);
     }
-
+    public function test_hash_number_plural()
+    {
+        $n = new TextNormalizerImpl();
+        $this->assertSame('Add number 16', $n->normalizeCommand('Add #16s'));
+    }
 
     public function test_token_subset_and_levenshtein(): void
     {
