@@ -119,7 +119,6 @@ final class TextNormalizerImpl implements TextNormalizer
         $s = preg_replace('/\bmilk[-\s]*shake\b/iu','milkshake',$s) ?? $s;
         $s = preg_replace('/\bjalapen(?:o|os)\b/iu','jalapeno',$s) ?? $s;
         $s = preg_replace('/\bmac\s*(?:and|&|n[\'’]?)\s*cheese\b/iu', 'mac & cheese', $s) ?? $s;
-        // keep “coke” as-is
         $s = preg_replace('/\bcheeseburgers\b/iu','cheese burgers',$s) ?? $s;
         $s = preg_replace('/\bcheeseburger\b/iu','cheese burger',$s) ?? $s;
         return $s;
