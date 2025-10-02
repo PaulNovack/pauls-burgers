@@ -23,17 +23,27 @@ final class CommandParser
 
         // ADD by ID
         if (preg_match(
-            '/^(?:add|and|also|plus|i\s+want|give\s+me|include)\s+'
-            . '(?:(?:at|in|on|to|for|please|me|us|the)\s+)*'
-            . '(?:(?<qty>\d+|one|two|to|too|three|four|for|five|six|seven|eight|nine|ten|eleven|twelve)\s*,?\s+)?'
-            . '(?:of\s+)?'
-            . '(?:a|an)?\s*(?:number|no\.|#)?\s*'
-            . '(?:(?<id>\d+)\s*(?:\'s|’s|s)?|(?<idw>(?:zero|one|two|to|too|three|four|for|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty)(?:[-\s]+(?:one|two|three|four|five|six|seven|eight|nine))?)(?:\'s|’s|s|es|ies)?)\b'
-            . '(?:\s+(?<size>small|regular|large))?'
-            . '(?:.*?\bwith\b\s+(?<with>.*?))?'
-            . '(?:.*?\bwithout\b\s+(?<without>.*))?'
-            . '$/siu',
-            $norm, $m
+            '/^(?:add|and|also|plus|i\s+want|give\s+me|include)\s+'.
+            '(?:(?:at|in|on|to|for|please|me|us|the)\s+)*'.
+            '(?:(?<qty>\d+|one|two|to|too|three|four|for|five|six|seven|eight|'.
+            'nine|ten|eleven|twelve)\s*,?\s+)?'.
+            '(?:of\s+)?'.
+            '(?:a|an)?\s*'.
+            '(?:number|no\.|#)\s*'.               // ← now REQUIRED
+            '(?:(?<id>\d+)|'.
+            '(?<idw>(?:zero|one|two|to|too|three|four|for|five|six|seven|eight|'.
+            'nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|'.
+            'eighteen|nineteen|twenty|thirty|forty|fifty|sixty)(?:[-\s]+'.
+            '(?:one|two|three|four|five|six|seven|eight|nine))?)'.
+            '(?:\'s|’s|s|es|ies)?' .
+            ')\b'.
+            '(?:\s*,\s*)?' .                      // allow comma after id
+            '(?:\s+(?<size>small|regular|large))?'.
+            '(?:.*?\bwith\b\s+(?<with>.*?))?'.
+            '(?:.*?\bwithout\b\s+(?<without>.*))?'.
+            '$/siu',
+            $norm,
+            $m
         )) {
             $qty  = $this->toQty($m['qty'] ?? '') ?: 1;
             $id   = !empty($m['id'])
