@@ -14,10 +14,7 @@ return [
     |
     */
 
-    'piper_tts' => [
-        'url'     => env('PIPER_TTS_URL', 'http://127.0.0.1:8001/speak'),
-        'timeout' => env('PIPER_TTS_TIMEOUT', 20),
-    ],
+
 
     'postmark' => [
         'token' => env('POSTMARK_TOKEN'),

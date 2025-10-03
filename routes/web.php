@@ -32,8 +32,3 @@ Route::post('/order/asr', OrderFromAsrController::class);
 Route::post('/list/from-audio', ListFromAsrController::class); // expects: audio=<file>
 Route::post('/list/from-text',  ListFromTextController::class)->withoutMiddleware([VerifyCsrfToken::class]);
 
-Route::get('/{any}', function () {
-    return view('home'); // the blade above
-})->where('any', '^(?!api|storage|build|dist|assets|_debugbar).*$');
-
-

@@ -11,6 +11,7 @@
                         endpoint="/order/asr"
                         @update:order="handleUpdate"
                         @transcript="handleTranscript"
+                        @tts_transcript="handleTTS"
                     />
                     <button
                         class="text-xs px-3 py-1 rounded bg-gray-900 text-white"
@@ -20,6 +21,20 @@
                         Clear
                     </button>
                 </div>
+                <div class="flex items-center justify-between mb-3">
+                    <button @click="playDing" class="px-3 py-2 rounded bg-gray-900 text-white text-sm">
+                        Play test sound
+                    </button>
+
+                    <AudioPlayer
+                        ref="player"
+                        @ready="() => console.log('buffered and ready')"
+                        @started="(info) => console.log('started', info)"
+                        @ended="() => console.log('ended')"
+                        @error="(e) => console.error('audio error', e)"
+                    />
+                </div>
+
 
                 <div class="grid grid-cols-[64px_1fr_auto] gap-3 items-center">
                     <!-- lines -->
@@ -28,7 +43,7 @@
                             <div class="text-sm text-right">({{ line.quantity }})</div>
 
                             <div class="text-sm text-left leading-tight">
-                                #{{line.id}} {{ line.name }}
+                                #{{ line.id }} {{ line.name }}
                                 <span v-if="line.size">({{ line.size }})</span>
 
                                 <!-- Add / Without line -->
@@ -192,6 +207,26 @@
 <script setup lang="ts">
 import {ref, computed, onMounted} from 'vue'
 import RecordButton from '@/components/RecordButton.vue'
+import AudioPlayer from '@/components/AudioPlayer.vue'
+
+type AudioPlayerRef = {
+    play: (url: string, opts?: { volume?: number; startAt?: number }) => Promise<void>
+    pause: () => void
+    stop: () => void
+    setVolume: (v: number) => void
+    isPlaying: boolean
+    isReady: boolean
+}
+
+const player = ref<AudioPlayerRef | null>(null)
+
+function playDing() {
+    player.value?.play('/wavs/ding.wav', {volume: 0.9})
+}
+
+function playFromApi(url: string) {
+    player.value?.play(url, {startAt: 0})
+}
 
 /** ---------- Types ---------- */
 type Topping = string
@@ -217,6 +252,7 @@ const myOrder = ref<OrderItem[]>([])
 
 // fetch session order when page loads
 async function loadOrder() {
+    playDing()
     const res = await fetch('/order', {
         method: 'GET',
         headers: {'Accept': 'application/json'},
@@ -239,6 +275,11 @@ function handleUpdate(items: OrderItem[]) {
 function handleTranscript(text: string) {
     // Optional: show somewhere, or toast, etc.
     console.log('Heard:', text)
+}
+
+function handleTTS(text: string) {
+    // Optional: show somewhere, or toast, etc.
+    console.log('play:', text)
 }
 
 /** Optional text command helper (uses /order/command if you kept it) */
@@ -478,4 +519,5 @@ const groupedDrinks = computed<SideGroup[]>(() => {
         }))
         .sort((a, b) => a.name.localeCompare(b.name))
 })
+
 </script>

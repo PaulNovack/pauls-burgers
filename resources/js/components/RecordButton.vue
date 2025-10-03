@@ -63,6 +63,7 @@ type OrderItem = {
 const emit = defineEmits<{
     (e: 'update:order', items: OrderItem[]): void
     (e: 'transcript', text: string): void
+    (e: 'tts_transcript', text: string): void
     (e: 'state', state: 'idle'|'recording'|'error'): void
     (e: 'error', message: string): void
 }>()
@@ -196,6 +197,7 @@ async function send(blob: Blob) {
         const json = await res.json()
 
         if (json?.heard != null) emit('transcript', String(json.heard))
+        if (json?.tts_url != null) emit('tts_transcript', String(json.tts_url))
         const items = Array.isArray(json?.items) ? json.items : Object.values(json?.items ?? {})
         emit('update:order', items as OrderItem[])
     } catch (e: any) {

@@ -1,18 +1,14 @@
 # piper-server.py
 import io
 import os
-import tempfile
-import subprocess
+import json
 import tempfile
 import logging
 import threading
 import subprocess
-from typing import Optional, Tuple
+from typing import Any, Union, Optional, Tuple
 
-from fastapi import FastAPI, HTTPException, Response
-from fastapi import FastAPI
-from fastapi import Request
-from fastapi.responses import JSONResponse
+from fastapi import FastAPI, HTTPException, Response, Request, Body
 from pydantic import BaseModel
 
 import uvicorn
@@ -38,6 +34,7 @@ last_probe_detail: str = ""
 PIPER_BACKEND = os.getenv("PIPER_BACKEND", "auto").lower()  # auto|binding|cli
 backend_last_used = "unknown"  # for /health reporting
 
+
 class SpeakIn(BaseModel):
     text: str
     # Kept for forward-compat with other builds; unused in this binding
@@ -48,6 +45,7 @@ class SpeakIn(BaseModel):
     # Use CLI fallback explicitly per-request if desired
     use_cli_fallback: Optional[bool] = False
 
+
 # ---------- Helpers ----------
 def _file_exists(path: str) -> Tuple[bool, int]:
     try:
@@ -55,6 +53,7 @@ def _file_exists(path: str) -> Tuple[bool, int]:
         return True, st.st_size
     except Exception:
         return False, 0
+
 
 def _synthesize_binding(text: str, speaker: Optional[int]) -> bytes:
     """
@@ -105,6 +104,7 @@ def _synthesize_binding(text: str, speaker: Optional[int]) -> bytes:
 
     return b""  # binding produced nothing
 
+
 def _synthesize_cli(text: str, model_path: str) -> bytes:
     with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as f:
         out = f.name
@@ -118,6 +118,78 @@ def _synthesize_cli(text: str, model_path: str) -> bytes:
             os.unlink(out)
         except Exception:
             pass
+
+
+def coerce_text(payload: Union[str, dict, SpeakIn]) -> str:
+    """
+    Accepts:
+      - proper object: {"text": "..."} or SpeakIn
+      - raw string: "speak this"
+      - stringified JSON: '{"text":"speak this"}'
+    Returns the normalized text string.
+    """
+    # Proper Pydantic model
+    if isinstance(payload, SpeakIn):
+        return payload.text.strip()
+
+    # Dict-like
+    if isinstance(payload, dict):
+        if "text" in payload and isinstance(payload["text"], str):
+            return payload["text"].strip()
+        # Fallback: stringify dict (not ideal, but avoids KeyErrors)
+        return json.dumps(payload, ensure_ascii=False)
+
+    # Raw string
+    if isinstance(payload, str):
+        s = payload.strip()
+        # If it *looks* like JSON, try to parse and extract .text
+        if s and s[0] in ('{', '['):
+            try:
+                obj = json.loads(s)
+                if isinstance(obj, dict) and isinstance(obj.get("text"), str):
+                    return obj["text"].strip()
+            except Exception:
+                pass
+        return s
+
+    # Last resort
+    return str(payload).strip()
+
+
+def _synthesize_to_bytes(text: str, speaker: Optional[int]) -> bytes:
+    """
+    Unified synth path.
+    Tries binding first (when allowed), then CLI.
+    Updates global backend_last_used on success.
+    """
+    global backend_last_used
+
+    data = b""
+    used = None
+
+    if PIPER_BACKEND in ("auto", "binding"):
+        try:
+            data = _synthesize_binding(text, speaker=speaker)
+        except Exception:
+            logger.debug("Binding synth error", exc_info=True)
+            data = b""
+        if data:
+            used = "binding"
+
+    if not data and PIPER_BACKEND in ("auto", "cli"):
+        try:
+            data = _synthesize_cli(text, MODEL_PATH)
+        except Exception:
+            logger.debug("CLI synth error", exc_info=True)
+            data = b""
+        if data:
+            used = "cli"
+
+    if data and used:
+        backend_last_used = used
+
+    return data
+
 
 def _probe_speakers() -> Optional[int]:
     """
@@ -153,6 +225,7 @@ def _probe_speakers() -> Optional[int]:
         last_probe_detail = f"CLI failed: {e}"
 
     return None
+
 
 # ---------- Lifespan (replaces deprecated on_event) ----------
 @app.on_event("startup")
@@ -194,10 +267,12 @@ def startup():
         warmup_bytes = len(data)
         logger.info("Warm-up OK: %d bytes (%s)", warmup_bytes, last_probe_detail)
 
+
 @app.on_event("shutdown")
 def shutdown():
     # Nothing special; let GC handle
     pass
+
 
 # ---------- Endpoints ----------
 @app.get("/health")
@@ -214,48 +289,29 @@ def health():
         "backend_last_used": backend_last_used,
     }
 
-@app.post("/speak")
-def speak(payload: SpeakIn):
-    global backend_last_used
 
-    if not payload.text or len(payload.text) > 2000:
+@app.post("/speak")
+async def speak(request: Request, raw: Any = Body(...)):
+    # Normalize the incoming payload to a string to speak
+    # (works for {"text":"..."}, "string", or '{"text":"..."}')
+    text = coerce_text(raw)
+
+    if not text or len(text) > 2000:
         raise HTTPException(status_code=400, detail="text is required (<=2000 chars)")
 
-    logger.info("Requested synthesis: %r", payload.text)   # <-- LOG THE TEXT
+    logger.info("Requested synthesis: %r", text)
 
-    speaker = payload.speaker if payload.speaker is not None else DEFAULT_SPEAKER
+    # Choose speaker: prefer explicit speaker in body; else DEFAULT_SPEAKER
+    speaker = DEFAULT_SPEAKER
+    if isinstance(raw, dict) and isinstance(raw.get("speaker"), int):
+        speaker = raw["speaker"]
 
     try:
         with synth_lock:
-            data = b""
-
-            # 1) Binding path (if allowed)
-            if PIPER_BACKEND in ("auto", "binding"):
-                try:
-                    data = _synthesize_to_bytes(payload.text, speaker=speaker)
-                except Exception as e:
-                    logger.debug("Binding synth error: %s", e, exc_info=True)
-                    data = b""
-
-                if data:
-                    backend_last_used = "binding"
-                    logger.info("Synthesized %d bytes via binding", len(data))
-
-            # 2) CLI fallback (if still empty and allowed)
-            if not data and PIPER_BACKEND in ("auto", "cli"):
-                try:
-                    data = _synthesize_cli(payload.text, MODEL_PATH)
-                except Exception as e:
-                    logger.debug("CLI synth error: %s", e, exc_info=True)
-                    data = b""
-
-                if data:
-                    backend_last_used = "cli"
-                    logger.info("Synthesized %d bytes via CLI", len(data))
-
+            data = _synthesize_to_bytes(text, speaker=speaker)
             if not data:
                 raise RuntimeError("synthesis produced 0 bytes (both backends)")
-
+            logger.info("Synthesized %d bytes via %s", len(data), backend_last_used)
     except Exception as e:
         logger.exception("Piper synthesis failed")
         raise HTTPException(status_code=500, detail=f"synthesis failed: {e}")
@@ -263,8 +319,9 @@ def speak(payload: SpeakIn):
     return Response(
         content=data,
         media_type="audio/wav",
-        headers={"Content-Disposition": 'inline; filename=\"speech.wav\"'}
+        headers={"Content-Disposition": 'inline; filename="speech.wav"'}
     )
+
 
 # ---------- Entrypoint ----------
 if __name__ == "__main__":

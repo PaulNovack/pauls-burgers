@@ -35,6 +35,7 @@ class OrderFromAsrController extends Controller
                 'items'    => $result['items'] ?? [],
                 'model_ms' => $asrResult['time_ms'] ?? null,
                 'e2e_ms'   => $asrResult['e2e_ms'] ?? null,
+                'tts_url'  => "lkjlkjkkljklafdlkdsalf.wav",
             ]);
         } catch (ValidationException $ve) {
             // will already return 422 via validate(), but keeping pattern here
