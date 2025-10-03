@@ -72,6 +72,11 @@ return [
             'days' => env('LOG_DAILY_DAYS', 14),
             'replace_placeholders' => true,
         ],
+        'phrase' => [
+            'driver' => 'daily',
+            'path'   => storage_path('logs/phrase.log'),
+            'level'  => env('LOG_LEVEL', 'debug'),
+        ],
 
         'slack' => [
             'driver' => 'slack',
