@@ -6,7 +6,7 @@
         :title="state === 'recording' ? 'Click to stop' : 'Click to start'"
     >
     <span class="tabular-nums">
-      {{ state === 'recording' ? 'Stop' : 'Record' }}
+      {{ state === 'recording' ? 'Stop' : 'Click to Start Order' }}
     </span>
 
         <!-- VU meter -->

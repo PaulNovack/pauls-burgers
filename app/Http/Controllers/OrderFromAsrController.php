@@ -7,6 +7,7 @@ use App\Services\Order\OrderService;   // ✅ import the modular service
 use App\Services\TextToSpeechService;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
 use Throwable;
 
@@ -68,14 +69,15 @@ class OrderFromAsrController extends Controller
             'OK',
             'you bet',
             'Okay',
-            'K',
+            'with pleasure',
+            'as you wish',
             'got it',
             'Sure',
+            'Done',
             'Sure thing',
+            'right away',
             'ok Done',
             'ok that Works',
-            'roger that',
-            '10 4',
             'Got it',
             'On it',
             'Alright',
@@ -101,15 +103,16 @@ class OrderFromAsrController extends Controller
             // ASR service returns ['text' => string, 'time_ms' => int|null, 'e2e_ms' => int|null]
             $asrResult = $asr->transcribeUploadedFile($file);
             $text = trim((string)($asrResult['text'] ?? ''));
-
+            Log::channel("phrase",)->info("ASR Text:",[$text]);
             // Use injected $order; DO NOT re-resolve with app()
             $result = $order->processCommand($text);
             if($result['action'] != 'add' && $result['action'] != 'remove' && $text != ''){
                 $wav =$tts->getOrCreate($this->randomNoMatchReply($text));
+                Log::channel("phrase",)->info("ASR Response:",['failed']);
             } else if ($text != '' && $text != 'thank you'){
                 $wav =$tts->getOrCreate($this->randomOkPhrase());
+                Log::channel("phrase",)->info("ASR Response:",['success']);
             }
-
 
             return response()->json([
                 'heard'    => $text,
