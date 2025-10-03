@@ -109,7 +109,8 @@ def _synthesize_cli(text: str, model_path: str) -> bytes:
     with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as f:
         out = f.name
     try:
-        cmd = ["piper", "--model", model_path, "--output_file", out, "--text", text]
+        logger.info('sending to cli %r', text)
+        cmd = ["piper", "--model", model_path, "--output_file", out, text]
         subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         with open(out, "rb") as r:
             return r.read()
@@ -171,16 +172,17 @@ def _synthesize_to_bytes(text: str, speaker: Optional[int]) -> bytes:
         try:
             data = _synthesize_binding(text, speaker=speaker)
         except Exception:
-            logger.debug("Binding synth error", exc_info=True)
+            logger.debug("Binding synth error %r", exc_info=True)
             data = b""
         if data:
             used = "binding"
 
     if not data and PIPER_BACKEND in ("auto", "cli"):
         try:
+            logger.debug("Text sending  %r", text)
             data = _synthesize_cli(text, MODEL_PATH)
         except Exception:
-            logger.debug("CLI synth error", exc_info=True)
+            logger.debug("CLI synth error  %r", exc_info=True)
             data = b""
         if data:
             used = "cli"
@@ -295,7 +297,7 @@ async def speak(request: Request, raw: Any = Body(...)):
     # Normalize the incoming payload to a string to speak
     # (works for {"text":"..."}, "string", or '{"text":"..."}')
     text = coerce_text(raw)
-
+    logger.info("coerce_text  %r", text)
     if not text or len(text) > 2000:
         raise HTTPException(status_code=400, detail="text is required (<=2000 chars)")
 
@@ -308,6 +310,7 @@ async def speak(request: Request, raw: Any = Body(...)):
 
     try:
         with synth_lock:
+            logger.info("Requested and sending synthesis: %r", text)
             data = _synthesize_to_bytes(text, speaker=speaker)
             if not data:
                 raise RuntimeError("synthesis produced 0 bytes (both backends)")
@@ -319,7 +322,11 @@ async def speak(request: Request, raw: Any = Body(...)):
     return Response(
         content=data,
         media_type="audio/wav",
-        headers={"Content-Disposition": 'inline; filename="speech.wav"'}
+        headers={
+            "Content-Disposition": 'inline; filename="speech.wav"',
+            "Cache-Control": "no-store, no-cache, must-revalidate",
+            "Pragma": "no-cache",
+        },
     )
 
 

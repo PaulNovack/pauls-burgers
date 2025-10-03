@@ -28,7 +28,7 @@ class TextToSpeechService
     public function __construct(?Client $http = null)
     {
         // You can set this in .env as PIPER_TTS_URL
-        $this->endpoint = rtrim(config('services.piper_tts.url', env('PIPER_TTS_URL', 'http://127.0.0.1:8001/speak')), '/');
+        $this->endpoint = rtrim(config('services.piper_tts.url', env('PIPER_TTS_URL', 'http://127.0.0.1:8002/speak')), '/');
         $this->timeout  = (int) config('services.piper_tts.timeout', env('PIPER_TTS_TIMEOUT', 20));
         $this->http     = $http ?? new Client([
             'timeout' => $this->timeout,
@@ -63,7 +63,7 @@ class TextToSpeechService
 
         // If file already exists, return public URL
         if (File::exists($path) && File::size($path) > 0) {
-            return asset('wavs/' . $filename);
+            return "http://127.0.0.1:8000/wavs/"  . $filename;
         }
 
         // Create it via Piper
@@ -80,7 +80,7 @@ class TextToSpeechService
             throw new RuntimeException('Failed to write WAV to disk.');
         }
 
-        return asset('wavs/' . $filename);
+        return "http://127.0.0.1:8000/wavs/" . $filename;
     }
 
     /**

@@ -14,7 +14,10 @@ final class TextNormalizerImpl implements TextNormalizer
         $s = trim($s ?? '');
         $s = preg_replace('/\s+/u', ' ', $s) ?? $s;
         $s = preg_replace('/[.!?]+$/u', '', $s) ?? $s;
-
+        // Normalizes leading "Remove the" or "Move" to "Remove"
+        $s = preg_replace('/^\s*(?:move\s+the|move|move\s+the)\b\s*/i', 'Remove ', $s);
+        // Optional tidy-up: collapse doubles and trim
+        $s = preg_replace('/\s{2,}/', ' ', trim($s));
         // light fillers
         $s = preg_replace('/^\s*(?:well|you know|ya know|so|hey)[ ,]+/iu', '', $s)
             ?? $s;

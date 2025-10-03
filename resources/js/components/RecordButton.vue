@@ -33,7 +33,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onBeforeUnmount } from 'vue'
+import {ref, onBeforeUnmount, onMounted} from 'vue'
 
 /** ---------- Props & Emits ---------- */
 const props = withDefaults(defineProps<{
@@ -298,6 +298,7 @@ function fail(msg: string) {
     emit('state', state.value)
     cleanupAll()
 }
+
 
 onBeforeUnmount(() => {
     try { if (rec && rec.state === 'recording') rec.stop() } catch {}

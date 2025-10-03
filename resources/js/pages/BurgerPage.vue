@@ -221,7 +221,7 @@ type AudioPlayerRef = {
 const player = ref<AudioPlayerRef | null>(null)
 
 function playDing() {
-    player.value?.play('/wavs/ding.wav', {volume: 0.9})
+    player.value?.play('/wavs/newgreet.wav', {volume: 0.9})
 }
 
 function playFromApi(url: string) {
@@ -280,6 +280,7 @@ function handleTranscript(text: string) {
 function handleTTS(text: string) {
     // Optional: show somewhere, or toast, etc.
     console.log('play:', text)
+    player.value?.play(text, {volume: 0.9})
 }
 
 /** Optional text command helper (uses /order/command if you kept it) */

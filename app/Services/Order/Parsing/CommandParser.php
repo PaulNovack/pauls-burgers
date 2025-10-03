@@ -23,7 +23,7 @@ final class CommandParser
 
         // ADD by ID
         if (preg_match(
-            '/^(?:add|and|also|plus|i\s+want|give\s+me|include)\s+'.
+            '/^(?:add|added|and|also|plus|have\s+a|add\s+the|and\s+the|i\s+won|i\s+want|can\s+i\shave|could\s+you\s+get\s+me|give\s+me|include)\s+'.
             '(?:(?:at|in|on|to|for|please|me|us|the)\s+)*'.
             '(?:(?<qty>\d+|one|two|to|too|three|four|for|five|six|seven|eight|'.
             'nine|ten|eleven|twelve)\s*,?\s+)?'.
@@ -56,7 +56,7 @@ final class CommandParser
 
         // ADD by NAME
         if (preg_match(
-            '/^(?:add|and|also|plus|i\s+want|give\s+me|include)\s+'
+            '/^(?:add|and|want|also|plus|i\s+want|have\s+a|give\s+me|i\s+would\s+like\s+some|can\s+i\s+have\s+some|can\s+i\s+have\s+a|include)\s+'
             . '(?:(?:at|in|on|to|for|please|me|us|the)\s+)*'
             . '(?:(?<qty>\d+|one|two|to|too|three|four|for|five|six|seven|eight|nine|ten|eleven|twelve)\s+)?'
             . '(?:(?<size>small|regular|large)\s+)?'
@@ -90,10 +90,10 @@ final class CommandParser
 
         // REMOVE by ID
         if (preg_match(
-            '/^(?:remove|delete|drop|minus|take\s+off)\s+'
+            '/^(?:remove|we\'ve\s+moved\s+to|get\s+rid\s+of|forget|can\s+you\s+remove|could\s+you\s+remove|removing|take\s+back|cancel|delete|drop|minus|moving|takeoff|take\s+off|i\s*(?:do\s*not|don[’\']?t)\s+want)\s+'
             . '(?:(?<qty>\d+|one|two|to|too|three|four|for|five|six|seven|eight|nine|ten|eleven|twelve)\s*,?\s+)?'
             . '(?:of\s+)?'
-            . '(?:a|an)?\s*(?:number|no\.|#)?\s*'
+            . '(?:a|an|the)?\s*(?:number|no\.|#)?\s*'
             . '(?:(?<id>\d+)\s*(?:\'s|’s|s)?|(?<idw>(?:zero|one|two|to|too|three|four|for|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty)(?:[-\s]+(?:one|two|three|four|five|six|seven|eight|nine))?)(?:\'s|’s|s|es|ies)?)\b'
             . '(?:\s+(?<size>small|regular|large))?'
             . '(?:.*?\bwith\b\s+(?<with>.*?))?'
@@ -111,7 +111,7 @@ final class CommandParser
 
         // REMOVE by NAME
         if (preg_match(
-            '/^(?:remove|delete|drop|minus|take\s+off)\s+'
+            '/^(?:remove|We\'ve\s+moved\s+to|forget|get\s+rid\s+of|removing|take\s+back|cancel|cancell|delete|drop|minus|moving|takeoff|take\s+off|i\s*(?:do\s*not|don[’\']?t)\s+want)\s+'
             . '(?:(?<qty>\d+|one|two|to|too|three|four|for|five|six|seven|eight|nine|ten|eleven|twelve)\s+)?'
             . '(?:(?<size>small|regular|large)\s+)?'
             . '(?<name>.+?)(?=\s+(?:with|without)\b|$)'
