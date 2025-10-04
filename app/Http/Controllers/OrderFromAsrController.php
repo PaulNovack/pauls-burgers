@@ -100,9 +100,9 @@ class OrderFromAsrController extends Controller
         $file = $data['audio'];
 
         try {
-            // ASR service returns ['text' => string, 'time_ms' => int|null, 'e2e_ms' => int|null]
+            // ASR service returns TranscriptionResult DTO
             $asrResult = $asr->transcribeUploadedFile($file);
-            $text = trim((string)($asrResult['text'] ?? ''));
+            $text = trim($asrResult->text);
             Log::channel("phrase",)->info("ASR Text:",[$text]);
             // Use injected $order; DO NOT re-resolve with app()
             $result = $order->processCommand($text);
@@ -118,8 +118,8 @@ class OrderFromAsrController extends Controller
                 'heard'    => $text,
                 'action'   => $result['action'] ?? 'noop',
                 'items'    => $result['items'] ?? [],
-                'model_ms' => $asrResult['time_ms'] ?? null,
-                'e2e_ms'   => $asrResult['e2e_ms'] ?? null,
+                'model_ms' => $asrResult->modelTimeMs,
+                'e2e_ms'   => $asrResult->endToEndMs,
                 'tts_url'  => $wav,
             ]);
         } catch (ValidationException $ve) {

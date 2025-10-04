@@ -17,8 +17,8 @@ class ListFromAsrController extends Controller
 
         $file = $request->file('audio');
 
-        $asrResult = $asr->transcribeUploadedFile($file); // ['text','time_ms','e2e_ms']
-        $text = $asrResult['text'] ?? '';
+        $asrResult = $asr->transcribeUploadedFile($file); // TranscriptionResult DTO
+        $text = $asrResult->text;
 
         $result = $list->processCommand($text);
 
@@ -26,8 +26,8 @@ class ListFromAsrController extends Controller
             'heard'   => $text,
             'action'  => $result['action'],
             'items'   => $result['items'],
-            'model_ms'=> $asrResult['time_ms'] ?? null,
-            'e2e_ms'  => $asrResult['e2e_ms'] ?? null,
+            'model_ms'=> $asrResult->modelTimeMs,
+            'e2e_ms'  => $asrResult->endToEndMs,
         ]);
     }
 }

@@ -28,7 +28,7 @@ class TranscribeController extends Controller
 
             $result = $asr->transcribeUploadedFile($file);
 
-            return response()->json($result);
+            return response()->json($result->toArray());
 
         } catch (\RuntimeException $e) {
             // Upstream ASR failure → 502 like before
