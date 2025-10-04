@@ -1,15 +1,39 @@
 [Unit]
-Description=Piper TTS HTTP Server
-After=network.target
+Description=Piper TTS HTTP Server (FastAPI)
+After=network-online.target
+Wants=network-online.target
 
 [Service]
-User=www-data
-Group=www-data
+Type=simple
+User=piper
+Group=piper
 WorkingDirectory=/opt/piper-server
+
+# App configuration
+Environment="PORT=8002"
 Environment="PIPER_MODEL=/opt/piper-server/models/en_US-amy-low.onnx"
-ExecStart=/opt/piper-server/.venv/bin/uvicorn server:app --host 0.0.0.0 --port 8001 --timeout-keep-alive 20
-Restart=always
+Environment="PIPER_BACKEND=auto"
+# Set if you want to force a speaker index; otherwise leave empty
+Environment="PIPER_SPEAKER="
+
+# Use the pyenv-managed interpreter directly (no shell init needed)
+ExecStart=/home/pnovack/.pyenv/versions/piper-3.11/bin/python /opt/piper-server/piper-server.py
+
+Restart=on-failure
 RestartSec=2
+
+# (Nice-to-have) Hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/piper-server
+
+# Logging (journalctl). If you want files instead, uncomment the two lines below (systemd v240+):
+# StandardOutput=append:/var/log/piper/piper.log
+# StandardError=append:/var/log/piper/piper.err
+
+TimeoutStopSec=10
 
 [Install]
 WantedBy=multi-user.target

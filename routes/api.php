@@ -10,4 +10,11 @@ Route::get('/transcribe', function () {
     ]);
 });
 
+Route::get('/menu', function () {
+    // You can also wrap this with Cache::remember if you like.
+    return response()->json([
+        'items' => config('menu.items', []),
+    ]);
+});
+
 Route::post('/transcribe', TranscribeController::class);
