@@ -5,6 +5,8 @@ It lets you record audio from the browser (via WebRTC), auto-detect silence, upl
 
 Utilizes Piper for speaking to user on burger ordering page and allows you to order burgers by speech.
 
+"Refactor" is latest working branch
+
 ---
 
 ## 🚀 Features
