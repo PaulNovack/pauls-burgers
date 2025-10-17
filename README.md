@@ -121,6 +121,7 @@ docker logs -f asr-service
 - FastAPI (Python 3.11)
 - Faster-Whisper (ASR)
 - Docker + Supervisor + Nginx
+- Piper Text to Speech (Amy Voice)
 
 ---
 
