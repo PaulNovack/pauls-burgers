@@ -17,6 +17,9 @@
     </style>
 </head>
 <body>
+<div id="down">
+    <h1>The ASR Engine and Speech engine are down you can see a demo video in my linked in posts</h1>
+</div>
 <div id="app" class="p-0 m-0 w-screen h-screen">
     <h1>WebRTC end-of-speech + Reverb + Faster-Whisper</h1>
     <h1>The ASR Engine and Speech engine are down you can see a demo video in my linked in posts</h1>
