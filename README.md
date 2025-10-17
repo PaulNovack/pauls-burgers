@@ -71,6 +71,8 @@ Visit:
 
 Record audio, and the transcription should appear when you stop speaking.
 
+!! There are some missing instructions here right now.  You must start the asr-service in the asr-service directory and the piper-service in the piper-service directory for the application to function.
+
 ---
 
 ## 🔗 API Endpoints
